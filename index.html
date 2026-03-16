@@ -313,6 +313,37 @@
     const lerp = (a, b, t) => a + (b - a) * t;
     const len = (x, y) => Math.hypot(x, y);
 
+    const animalSpriteSets = {
+      fish: ['animals/fish_0.png', 'animals/fish_1.png', 'animals/fish_2.png'],
+      fishSchool: ['animals/fish_school_0.png', 'animals/fish_school_1.png', 'animals/fish_school_2.png', 'animals/fish_school_3.png'],
+      dolphin: ['animals/dolphin_0.png', 'animals/dolphin_1.png', 'animals/dolphin_2.png'],
+      dolphinJump: ['animals/dolphin_jump_0.png', 'animals/dolphin_jump_1.png', 'animals/dolphin_jump_2.png', 'animals/dolphin_jump_3.png', 'animals/dolphin_jump_4.png'],
+      seagull: ['animals/seagull_0.png', 'animals/seagull_1.png', 'animals/seagull_2.png', 'animals/seagull_3.png'],
+      whale: ['animals/whale_0.png', 'animals/whale_1.png', 'animals/whale_2.png'],
+      whaleTail: ['animals/whale_tail_0.png', 'animals/whale_tail_1.png', 'animals/whale_tail_2.png', 'animals/whale_tail_3.png']
+    };
+
+    const animalSprites = {};
+    for (const [key, paths] of Object.entries(animalSpriteSets)) {
+      animalSprites[key] = paths.map((path) => {
+        const img = new Image();
+        img.src = path;
+        return img;
+      });
+    }
+
+    const animalBehaviors = {
+      fish: { scale: [0.58, 0.85], speed: [14, 28], frameRate: [6, 10], bob: 3, turnBias: 0.12, lift: 0 },
+      fishSchool: { scale: [0.62, 0.95], speed: [18, 32], frameRate: [7, 12], bob: 4, turnBias: 0.1, lift: 0 },
+      dolphin: { scale: [0.52, 0.78], speed: [26, 44], frameRate: [8, 12], bob: 5, turnBias: 0.18, lift: 0 },
+      dolphinJump: { scale: [0.62, 0.88], speed: [24, 38], frameRate: [7, 10], bob: 12, turnBias: 0.16, lift: 16 },
+      seagull: { scale: [0.5, 0.75], speed: [36, 56], frameRate: [10, 16], bob: 10, turnBias: 0.24, lift: -42 },
+      whale: { scale: [0.85, 1.18], speed: [10, 20], frameRate: [4, 7], bob: 2, turnBias: 0.08, lift: 2 },
+      whaleTail: { scale: [0.76, 1.02], speed: [8, 16], frameRate: [4, 7], bob: 6, turnBias: 0.08, lift: 3 }
+    };
+
+    const animalKinds = Object.keys(animalBehaviors);
+
     function normalizeAngle(a) {
       while (a <= -Math.PI) a += TAU;
       while (a > Math.PI) a -= TAU;
@@ -349,6 +380,7 @@
       splash: [],
       aiBoats: [],
       islands: [],
+      animals: [],
       crashed: false,
       crashTime: 0
     };
@@ -456,6 +488,66 @@
       }
     }
 
+    function createAnimal(kind = animalKinds[Math.floor(Math.random() * animalKinds.length)]) {
+      const behavior = animalBehaviors[kind];
+      const heading = Math.random() * TAU;
+      const speed = lerp(behavior.speed[0], behavior.speed[1], Math.random());
+      return {
+        kind,
+        x: Math.random() * world.width,
+        y: Math.random() * world.height,
+        vx: Math.cos(heading) * speed,
+        vy: Math.sin(heading) * speed,
+        speed,
+        heading,
+        turnSeed: Math.random() * TAU,
+        frame: 0,
+        frameRate: lerp(behavior.frameRate[0], behavior.frameRate[1], Math.random()),
+        frameTimer: 0,
+        bobSeed: Math.random() * TAU,
+        bobAmp: behavior.bob,
+        spriteScale: lerp(behavior.scale[0], behavior.scale[1], Math.random()),
+        lift: behavior.lift,
+        opacity: kind === 'seagull' ? 0.88 : 0.72 + Math.random() * 0.22
+      };
+    }
+
+    function spawnAnimals() {
+      world.animals = [];
+      const counts = {
+        fish: 10,
+        fishSchool: 7,
+        dolphin: 5,
+        dolphinJump: 4,
+        seagull: 6,
+        whale: 3,
+        whaleTail: 3
+      };
+
+      for (const [kind, total] of Object.entries(counts)) {
+        for (let i = 0; i < total; i++) {
+          world.animals.push(createAnimal(kind));
+        }
+      }
+    }
+
+    function updateAnimals(dt) {
+      for (const animal of world.animals) {
+        const behavior = animalBehaviors[animal.kind];
+        const targetHeading = animal.heading + Math.sin(world.timer * 0.18 + animal.turnSeed) * behavior.turnBias * dt;
+        animal.heading = normalizeAngle(lerp(animal.heading, targetHeading, dt * 3));
+        animal.vx = Math.cos(animal.heading) * animal.speed;
+        animal.vy = Math.sin(animal.heading) * animal.speed;
+
+        animal.x = (animal.x + animal.vx * dt + world.width) % world.width;
+        animal.y = (animal.y + animal.vy * dt + world.height) % world.height;
+
+        animal.frameTimer += dt * animal.frameRate;
+        const frames = animalSprites[animal.kind];
+        animal.frame = Math.floor(animal.frameTimer) % frames.length;
+      }
+    }
+
     function sinkAiBoat(ai, splashCount = 70) {
       if (ai.sunk) return;
       ai.sunk = true;
@@ -527,6 +619,7 @@
       world.windSpeed = 10 + Math.random() * 6;
       world.windGust = 0;
       world.splash = [];
+      spawnAnimals();
       world.crashed = false;
       world.crashTime = 0;
       spawnIslands();
@@ -795,6 +888,7 @@
       }
 
       world.waterPatternOffset += boat.speed * dt * 0.03;
+      updateAnimals(dt);
       world.mark.pulse += dt * 2;
 
       const dx = world.mark.x - boat.x;
@@ -871,6 +965,7 @@
 
       drawWater(camX, camY, w, h);
       drawGrid(camX, camY, w, h);
+      drawAnimals(camX, camY);
       drawIslands(camX, camY);
       drawAiBoats(camX, camY);
       drawMark(camX, camY);
@@ -1016,6 +1111,41 @@
         ctx.stroke();
       }
       ctx.restore();
+    }
+
+    function drawAnimals(camX, camY) {
+      const drawList = [...world.animals].sort((a, b) => (a.kind === 'seagull') - (b.kind === 'seagull'));
+      for (const animal of drawList) {
+        const frames = animalSprites[animal.kind];
+        const frame = frames[animal.frame];
+        if (!frame || !frame.complete) continue;
+
+        const bob = Math.sin(world.timer * 1.6 + animal.bobSeed) * animal.bobAmp;
+        const x = animal.x - camX;
+        const y = animal.y - camY + bob + animal.lift;
+
+        if (animal.kind === 'seagull') {
+          const shadowY = animal.y - camY + 8;
+          ctx.save();
+          ctx.translate(x, shadowY);
+          ctx.rotate(animal.heading);
+          ctx.globalAlpha = 0.16;
+          ctx.fillStyle = '#02131f';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 16 * animal.spriteScale, 8 * animal.spriteScale, 0, 0, TAU);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(animal.heading);
+        ctx.globalAlpha = animal.opacity;
+        const w = frame.naturalWidth * animal.spriteScale;
+        const h = frame.naturalHeight * animal.spriteScale;
+        ctx.drawImage(frame, -w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
     }
 
     function drawMark(camX, camY) {
