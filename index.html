@@ -370,7 +370,7 @@
     }
 
     function compassDeg(rad) {
-      let d = (90 - (rad * 180 / Math.PI)) % 360;
+      let d = ((rad * 180 / Math.PI) + 90) % 360;
       if (d < 0) d += 360;
       return d;
     }
