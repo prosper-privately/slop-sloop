@@ -32,7 +32,7 @@
     #game {
       display: block;
       width: 100vw;
-      height: 100vh;
+      height: 100dvh;
     }
 
     .hud {
@@ -153,6 +153,49 @@
       gap: 12px;
     }
 
+    .touch-controls {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      display: none;
+      gap: 10px;
+      pointer-events: auto;
+      z-index: 30;
+    }
+
+    .touch-group {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      background: rgba(7, 17, 31, 0.62);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      backdrop-filter: blur(8px);
+      padding: 10px;
+    }
+
+    .touch-btn {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 14px;
+      min-height: 44px;
+      padding: 10px 8px;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .touch-btn:active,
+    .touch-btn.active {
+      background: rgba(141, 225, 255, 0.24);
+      border-color: rgba(141, 225, 255, 0.55);
+    }
+
     .controls p {
       margin: 6px 0;
       color: var(--muted);
@@ -217,6 +260,62 @@
       .controls {
         grid-template-columns: 1fr;
         width: min(440px, calc(100vw - 32px));
+      }
+    }
+
+    @media (max-width: 760px), (pointer: coarse) {
+      .hud {
+        inset: max(8px, env(safe-area-inset-top)) 8px auto 8px;
+        gap: 8px;
+        width: min(280px, calc(100vw - 16px));
+      }
+
+      .panel {
+        border-radius: 12px;
+        padding: 8px 10px;
+      }
+
+      .hud > .panel:nth-child(2),
+      .hud > .panel:nth-child(3),
+      .controls,
+      .footer-note,
+      .title-brand img,
+      .subtitle,
+      .badge,
+      .row:nth-child(5),
+      .row:nth-child(6),
+      .row:nth-child(7),
+      .row:nth-child(8),
+      .row:nth-child(10) {
+        display: none;
+      }
+
+      .title {
+        margin-bottom: 4px;
+      }
+
+      .title h1 {
+        font-size: 16px;
+      }
+
+      .title-brand {
+        gap: 0;
+      }
+
+      .row {
+        padding: 3px 0;
+        font-size: 12px;
+      }
+
+      .row .label {
+        max-width: 58%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .touch-controls {
+        display: flex;
       }
     }
   </style>
@@ -289,6 +388,19 @@
     <a href="https://github.com/prosper-privately/slop-sloop" target="_blank" rel="noreferrer noopener">Fork me on GitHub</a>
   </div>
 
+  <div class="touch-controls" aria-label="Touch controls for mobile">
+    <div class="touch-group">
+      <button class="touch-btn" data-key="arrowleft">⟲ Left</button>
+      <button class="touch-btn" data-key="arrowright">Right ⟳</button>
+      <button class="touch-btn" data-key="arrowup">Trim In</button>
+      <button class="touch-btn" data-key="arrowdown">Ease Out</button>
+    </div>
+    <div class="touch-group" style="flex:0.7">
+      <button class="touch-btn" data-key=" ">Tack</button>
+      <button class="touch-btn" data-key="r">Restart</button>
+    </div>
+  </div>
+
 
   <script src="sim-math.js"></script>
   <script src="sim-gameplay.js"></script>
@@ -324,14 +436,18 @@
     };
 
     function resize() {
+      const viewport = window.visualViewport;
+      const width = viewport ? viewport.width : window.innerWidth;
+      const height = viewport ? viewport.height : window.innerHeight;
       const dpr = Math.max(1, window.devicePixelRatio || 1);
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      canvas.style.width = window.innerWidth + 'px';
-      canvas.style.height = window.innerHeight + 'px';
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
     resize();
 
     const {
@@ -473,6 +589,37 @@
       }
     });
     addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+    for (const button of document.querySelectorAll('.touch-btn')) {
+      const key = (button.dataset.key || '').toLowerCase();
+      if (!key) continue;
+
+      const activate = () => {
+        keys.add(key);
+        button.classList.add('active');
+        if (key === 'r') resetGame();
+        if (key === ' ') {
+          const apparent = normalizeAngle(world.trueWindDir - boat.heading);
+          boat.heading += apparent > 0 ? -0.28 : 0.28;
+          boat.rudder = apparent > 0 ? -0.8 : 0.8;
+        }
+      };
+
+      const deactivate = () => {
+        keys.delete(key);
+        button.classList.remove('active');
+      };
+
+      button.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        button.setPointerCapture?.(e.pointerId);
+        activate();
+      });
+      button.addEventListener('pointerup', deactivate);
+      button.addEventListener('pointercancel', deactivate);
+      button.addEventListener('lostpointercapture', deactivate);
+      button.addEventListener('pointerleave', deactivate);
+    }
 
     function spawnMark() {
       if (runConfig.e2eMode) {
