@@ -69,6 +69,21 @@
       letter-spacing: 0.04em;
     }
 
+    .title-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title-brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      object-fit: cover;
+    }
+
     .subtitle {
       color: var(--muted);
       font-size: 12px;
@@ -201,9 +216,12 @@
   <div class="hud">
     <div class="panel">
       <div class="title">
-        <div>
-          <div class="subtitle">Browser Sailing Simulator</div>
-          <h1>⛵ Slop Sloop</h1>
+        <div class="title-brand">
+          <img src="logo.png" alt="Slop Sloop logo" />
+          <div>
+            <div class="subtitle">Browser Sailing Simulator</div>
+            <h1>⛵ Slop Sloop</h1>
+          </div>
         </div>
         <div class="badge">Single file</div>
       </div>
@@ -215,6 +233,7 @@
       <div class="row"><span class="label">VMG to mark</span><span class="value" id="vmgValue">0.0 kn</span></div>
       <div class="row"><span class="label">Distance to mark</span><span class="value" id="distanceValue">0 m</span></div>
       <div class="row"><span class="label">Score</span><span class="value" id="scoreValue">0</span></div>
+      <div class="row"><span class="label">Next task</span><span class="value" id="taskValue">Find and round the buoy</span></div>
     </div>
 
     <div class="panel status" id="statusBox">
@@ -268,6 +287,7 @@
       vmg: document.getElementById('vmgValue'),
       distance: document.getElementById('distanceValue'),
       score: document.getElementById('scoreValue'),
+      task: document.getElementById('taskValue'),
       trim: document.getElementById('trimValue'),
       heel: document.getElementById('heelValue'),
       tack: document.getElementById('tackValue'),
@@ -440,7 +460,7 @@
       world.crashTime = 0;
       spawnIslands();
       spawnMark();
-      setStatus('Round the buoy. Avoid islands.', 'Sail fast on a reach, then work your angles between hazards.');
+      setStatus('Round the buoy.', 'Follow the cyan guide line to the glowing buoy, then pass close to round it.');
     }
 
     function setStatus(title, body) {
@@ -602,6 +622,8 @@
       ui.vmg.textContent = vmg.toFixed(1) + ' kn';
       ui.distance.textContent = Math.round(dist) + ' m';
       ui.score.textContent = String(world.score);
+      const bearing = Math.round(deg(Math.atan2(world.mark.y - boat.y, world.mark.x - boat.x)));
+      ui.task.textContent = `Steer ${String(bearing).padStart(3, '0')}° and round the buoy`;
       ui.trim.textContent = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heel.textContent = Math.round(boat.heel) + '°';
       ui.tack.textContent = normalizeAngle(world.windDir - boat.heading) > 0 ? 'Port' : 'Starboard';
@@ -717,22 +739,39 @@
       const x = world.mark.x - camX;
       const y = world.mark.y - camY;
       const pulse = 1 + Math.sin(world.mark.pulse * 2) * 0.1;
+      const boatScreenX = boat.x - camX;
+      const boatScreenY = boat.y - camY;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(boatScreenX, boatScreenY);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = 'rgba(141, 225, 255, 0.5)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([12, 10]);
+      ctx.stroke();
+      ctx.restore();
 
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(pulse, pulse);
 
       ctx.beginPath();
-      ctx.arc(0, 0, 34, 0, TAU);
-      ctx.fillStyle = 'rgba(255, 211, 106, 0.16)';
+      ctx.arc(0, 0, 60, 0, TAU);
+      ctx.fillStyle = 'rgba(141, 225, 255, 0.15)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 42, 0, TAU);
+      ctx.fillStyle = 'rgba(255, 211, 106, 0.24)';
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(0, 0, world.mark.r, 0, TAU);
-      ctx.fillStyle = '#ffd36a';
+      ctx.fillStyle = '#ffe18c';
       ctx.fill();
       ctx.strokeStyle = '#fff4c2';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.stroke();
 
       ctx.beginPath();
@@ -749,6 +788,11 @@
       ctx.closePath();
       ctx.fillStyle = '#ff8e8e';
       ctx.fill();
+
+      ctx.fillStyle = '#e6fbff';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('NEXT MARK', 0, -58);
       ctx.restore();
     }
 
