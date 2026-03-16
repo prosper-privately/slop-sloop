@@ -344,6 +344,7 @@
       windGust: 0,
       mark: null,
       splash: [],
+      aiBoats: [],
       islands: [],
       crashed: false,
       crashTime: 0
@@ -420,6 +421,60 @@
       }
     }
 
+    function spawnAiBoats() {
+      world.aiBoats = [];
+      const total = 5;
+      const margin = 380;
+      for (let i = 0; i < total; i++) {
+        let attempts = 0;
+        while (attempts++ < 220) {
+          const x = margin + Math.random() * (world.width - margin * 2);
+          const y = margin + Math.random() * (world.height - margin * 2);
+          const clearStart = Math.hypot(x - 2100, y - 2100) > 430;
+          const clearIslands = world.islands.every(island => Math.hypot(x - island.x, y - island.y) > island.r + 150);
+          const clearOthers = world.aiBoats.every(other => Math.hypot(x - other.x, y - other.y) > 170);
+          if (!clearStart || !clearIslands || !clearOthers) continue;
+          world.aiBoats.push({
+            x,
+            y,
+            vx: 0,
+            vy: 0,
+            heading: Math.random() * TAU,
+            sail: 0.45 + Math.random() * 0.35,
+            speed: 0,
+            trimEfficiency: 0,
+            sunk: false,
+            sinkProgress: 0,
+            thinkCooldown: 0,
+            targetHeading: Math.random() * TAU
+          });
+          break;
+        }
+      }
+    }
+
+    function sinkAiBoat(ai, splashCount = 70) {
+      if (ai.sunk) return;
+      ai.sunk = true;
+      ai.sinkProgress = 0;
+      ai.vx *= 0.2;
+      ai.vy *= 0.2;
+      for (let i = 0; i < splashCount; i++) {
+        const a = Math.random() * TAU;
+        const speed = 60 + Math.random() * 170;
+        world.splash.push({
+          x: ai.x,
+          y: ai.y,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          life: 0.7 + Math.random() * 1.3,
+          size: 2 + Math.random() * 4,
+          hue: 190 + Math.random() * 30,
+          fun: false
+        });
+      }
+    }
+
     function crashIntoIsland(island) {
       world.crashed = true;
       world.crashTime = 0;
@@ -469,6 +524,7 @@
       world.crashed = false;
       world.crashTime = 0;
       spawnIslands();
+      spawnAiBoats();
       spawnMark();
       setStatus('Round the buoy.', 'Follow the cyan guide line to the glowing buoy, then pass close to round it.');
     }
@@ -504,6 +560,14 @@
       if (world.crashed) {
         boat.rudder *= Math.pow(0.05, dt);
         boat.heel = lerp(boat.heel, 0, dt * 2.5);
+        boat.sail = lerp(boat.sail, 0.12, dt * 1.5);
+        for (const ai of world.aiBoats) {
+          ai.sinkProgress = clamp(ai.sinkProgress + dt * 0.8, 0, 1.15);
+          ai.vx *= Math.max(0, 1 - dt * 3.5);
+          ai.vy *= Math.max(0, 1 - dt * 3.5);
+          ai.x += ai.vx * dt;
+          ai.y += ai.vy * dt;
+        }
         world.splash = world.splash.filter(p => (p.life -= dt) > 0);
         for (const p of world.splash) {
           p.x += p.vx * dt;
@@ -579,6 +643,131 @@
         const islandDist = Math.hypot(boat.x - island.x, boat.y - island.y);
         if (islandDist < island.r + 28) {
           crashIntoIsland(island);
+          break;
+        }
+      }
+
+      for (const ai of world.aiBoats) {
+        if (ai.sunk) {
+          ai.sinkProgress = clamp(ai.sinkProgress + dt * 0.55, 0, 1.15);
+          ai.vx *= Math.max(0, 1 - dt * 2.8);
+          ai.vy *= Math.max(0, 1 - dt * 2.8);
+          ai.x += ai.vx * dt;
+          ai.y += ai.vy * dt;
+          continue;
+        }
+
+        ai.thinkCooldown -= dt;
+        if (ai.thinkCooldown <= 0) {
+          ai.thinkCooldown = 0.55 + Math.random() * 0.75;
+          let steerX = Math.cos(ai.heading);
+          let steerY = Math.sin(ai.heading);
+
+          const margin = 280;
+          if (ai.x < margin) steerX += (margin - ai.x) / margin * 1.4;
+          if (ai.x > world.width - margin) steerX -= (ai.x - (world.width - margin)) / margin * 1.4;
+          if (ai.y < margin) steerY += (margin - ai.y) / margin * 1.4;
+          if (ai.y > world.height - margin) steerY -= (ai.y - (world.height - margin)) / margin * 1.4;
+
+          for (const island of world.islands) {
+            const dx = ai.x - island.x;
+            const dy = ai.y - island.y;
+            const dist = Math.hypot(dx, dy);
+            const dangerRadius = island.r + 180;
+            if (dist < dangerRadius && dist > 0.001) {
+              const avoid = (dangerRadius - dist) / dangerRadius;
+              steerX += (dx / dist) * avoid * 2.2;
+              steerY += (dy / dist) * avoid * 2.2;
+            }
+          }
+
+          const fromPlayerX = ai.x - boat.x;
+          const fromPlayerY = ai.y - boat.y;
+          const playerDist = Math.hypot(fromPlayerX, fromPlayerY);
+          if (playerDist < 560 && playerDist > 0.001) {
+            const avoid = Math.pow((560 - playerDist) / 560, 1.2);
+            steerX += (fromPlayerX / playerDist) * avoid * 3.8;
+            steerY += (fromPlayerY / playerDist) * avoid * 3.8;
+          }
+
+          if (Math.random() < 0.27) {
+            const wander = Math.random() * TAU;
+            steerX += Math.cos(wander) * 0.4;
+            steerY += Math.sin(wander) * 0.4;
+          }
+
+          ai.targetHeading = Math.atan2(steerY, steerX);
+        }
+
+        const headingError = normalizeAngle(ai.targetHeading - ai.heading);
+        ai.heading = normalizeAngle(ai.heading + clamp(headingError, -1.1, 1.1) * dt * 0.95);
+
+        const trueWindRelAi = normalizeAngle(world.windDir - ai.heading);
+        const absWindAngleAi = Math.abs(trueWindRelAi);
+        const noGoAi = 35 * Math.PI / 180;
+        const bestSailAi = clamp(absWindAngleAi * 0.88, 0.16, 1.2);
+        ai.sail = lerp(ai.sail, bestSailAi, dt * 1.7);
+        const trimErrorAi = Math.abs(bestSailAi - ai.sail);
+        ai.trimEfficiency = clamp(1 - trimErrorAi / 0.78, 0, 1);
+
+        const pointFactorAi = (() => {
+          if (absWindAngleAi < noGoAi) return 0;
+          if (absWindAngleAi < Math.PI / 3) return 0.6;
+          if (absWindAngleAi < Math.PI / 2) return 0.95;
+          if (absWindAngleAi < 2.5) return 0.8;
+          return 0.56;
+        })();
+
+        const sailDriveAi = liveWindSpeed * pointFactorAi * ai.trimEfficiency;
+        const aiSpeed = len(ai.vx, ai.vy);
+        const dragAi = 0.24 + aiSpeed * 0.014;
+        const surgeAi = sailDriveAi * (absWindAngleAi < noGoAi ? 0.05 : 1) * 7.1;
+        ai.vx += Math.cos(ai.heading) * surgeAi * dt;
+        ai.vy += Math.sin(ai.heading) * surgeAi * dt;
+
+        const leewayAi = Math.sin(trueWindRelAi) * (0.55 + (1 - ai.trimEfficiency) * 0.45) * dt * 7.4;
+        ai.vx += Math.cos(ai.heading + Math.PI / 2) * leewayAi;
+        ai.vy += Math.sin(ai.heading + Math.PI / 2) * leewayAi;
+
+        ai.vx *= Math.max(0, 1 - dragAi * dt);
+        ai.vy *= Math.max(0, 1 - dragAi * dt);
+
+        ai.x += ai.vx * dt;
+        ai.y += ai.vy * dt;
+        ai.x = clamp(ai.x, 120, world.width - 120);
+        ai.y = clamp(ai.y, 120, world.height - 120);
+        ai.speed = len(ai.vx, ai.vy);
+
+        for (const island of world.islands) {
+          if (Math.hypot(ai.x - island.x, ai.y - island.y) < island.r + 22) {
+            sinkAiBoat(ai, 40);
+            break;
+          }
+        }
+
+        const impactDist = Math.hypot(ai.x - boat.x, ai.y - boat.y);
+        if (impactDist < 42) {
+          sinkAiBoat(ai, 80);
+          world.crashed = true;
+          world.crashTime = 0;
+          world.combo = 0;
+          boat.vx *= 0.08;
+          boat.vy *= 0.08;
+          for (let i = 0; i < 140; i++) {
+            const a = Math.random() * TAU;
+            const speed = 110 + Math.random() * 250;
+            world.splash.push({
+              x: boat.x,
+              y: boat.y,
+              vx: Math.cos(a) * speed,
+              vy: Math.sin(a) * speed,
+              life: 0.8 + Math.random() * 1.5,
+              size: 2 + Math.random() * 5,
+              hue: 180 + Math.random() * 40,
+              fun: false
+            });
+          }
+          setStatus('💥 Collision! Both boats sank.', 'You T-boned an AI sailor. Press R to restart your soggy career.');
           break;
         }
       }
@@ -661,11 +850,65 @@
       drawWater(camX, camY, w, h);
       drawGrid(camX, camY, w, h);
       drawIslands(camX, camY);
+      drawAiBoats(camX, camY);
       drawMark(camX, camY);
       drawSplash(camX, camY);
       drawBoat(w / 2 + (boat.x - camX - w / 2), h / 2 + (boat.y - camY - h / 2));
       drawMiniCompass(w - 130, h - 130);
       drawWindArrow(130, h - 120);
+    }
+
+    function drawAiBoats(camX, camY) {
+      for (const ai of world.aiBoats) {
+        const x = ai.x - camX;
+        const y = ai.y - camY;
+        const sink = clamp(ai.sinkProgress, 0, 1.15);
+        const sinkOffset = sink * 20;
+        const alpha = clamp(1 - sink * 0.75, 0.15, 1);
+
+        ctx.save();
+        ctx.translate(x, y + sinkOffset);
+        ctx.rotate(ai.heading);
+        ctx.globalAlpha = alpha;
+
+        ctx.beginPath();
+        ctx.moveTo(26, 0);
+        ctx.quadraticCurveTo(5, 11, -20, 9);
+        ctx.lineTo(-31, 0);
+        ctx.lineTo(-20, -9);
+        ctx.quadraticCurveTo(5, -11, 26, 0);
+        ctx.closePath();
+        ctx.fillStyle = ai.sunk ? '#7f8b94' : '#cfd9e4';
+        ctx.fill();
+        ctx.strokeStyle = '#8f9eac';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(-2, -33 + sink * 5);
+        ctx.strokeStyle = '#d4e4ef';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        const sailAngle = clamp(ai.sail, 0.08, 1.25) * (normalizeAngle(world.windDir - ai.heading) > 0 ? 1 : -1);
+        ctx.save();
+        ctx.translate(-2, -28 + sink * 4);
+        ctx.rotate(sailAngle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(21, 14, 26, 40);
+        ctx.lineTo(0, 40);
+        ctx.closePath();
+        ctx.fillStyle = ai.sunk ? '#8ea3af' : '#f0f8ff';
+        ctx.fill();
+        ctx.strokeStyle = '#a8bac8';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.restore();
+      }
     }
 
     function drawIslands(camX, camY) {
