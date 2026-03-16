@@ -800,48 +800,70 @@
 
       boat.speed = len(boat.vx, boat.vy);
 
+      const forwardX = Math.cos(boat.heading);
+      const forwardY = Math.sin(boat.heading);
+      const rightX = Math.cos(boat.heading + Math.PI / 2);
+      const rightY = Math.sin(boat.heading + Math.PI / 2);
+      let vForward = boat.vx * forwardX + boat.vy * forwardY;
+      let vLateral = boat.vx * rightX + boat.vy * rightY;
+
       const trueWindVx = Math.cos(world.trueWindDir) * liveWindSpeed;
       const trueWindVy = Math.sin(world.trueWindDir) * liveWindSpeed;
-      const apparentWindVx = trueWindVx - boat.vx * 0.18;
-      const apparentWindVy = trueWindVy - boat.vy * 0.18;
+      const apparentWindVx = trueWindVx - boat.vx;
+      const apparentWindVy = trueWindVy - boat.vy;
       const apparentWindDir = Math.atan2(apparentWindVy, apparentWindVx);
-      const trueWindRel = normalizeAngle(apparentWindDir - boat.heading);
-      const absWindAngle = Math.abs(trueWindRel);
+      const apparentWindRel = normalizeAngle(apparentWindDir - boat.heading);
+      const absWindAngle = Math.abs(apparentWindRel);
+      const apparentWindSpeed = Math.hypot(apparentWindVx, apparentWindVy);
+
       const noGo = 35 * Math.PI / 180;
-      const bestSail = clamp(absWindAngle * 0.7 + 0.08, 0.1, 1.18);
-      const trimWindow = 0.36;
+      const bestSail = clamp(absWindAngle * 0.58 + 0.06, 0.08, 1.2);
+      const trimWindow = 0.34;
       const trimError = Math.abs(bestSail - boat.sail);
-      const trimSharpness = absWindAngle < Math.PI / 3 ? 1.25 : 1;
+      const trimSharpness = absWindAngle < Math.PI / 2 ? 1.2 : 1;
       boat.trimEfficiency = clamp(1 - (trimError / trimWindow) * trimSharpness, 0, 1);
 
-      const pointFactor = (() => {
-        if (absWindAngle < noGo) return 0;
-        if (absWindAngle < Math.PI / 3) return 0.65;
-        if (absWindAngle < Math.PI / 2) return 1.0;
-        if (absWindAngle < 2.5) return 0.82;
-        return 0.58;
-      })();
-
       boat.inIrons = absWindAngle < noGo;
-      const sailDrive = liveWindSpeed * pointFactor * boat.trimEfficiency;
-      const heelTarget = clamp((liveWindSpeed * boat.trimEfficiency * Math.sin(absWindAngle) * 0.95), 0, 28);
-      boat.heel = lerp(boat.heel, heelTarget, dt * 1.8);
+      const sailSide = apparentWindRel >= 0 ? 1 : -1;
+      const sailAngle = sailSide * boat.sail;
+      const sailAoA = normalizeAngle(apparentWindRel - sailAngle);
+      const q = apparentWindSpeed * apparentWindSpeed;
+      const liftCoeff = Math.sin(2 * sailAoA) * boat.trimEfficiency;
+      const dragCoeff = (0.22 + 0.78 * (1 - Math.cos(sailAoA))) * boat.trimEfficiency;
 
-      const drag = 0.22 + boat.speed * 0.012 + Math.max(0, boat.heel - 18) * 0.01;
-      const turnRate = boat.rudder * clamp(0.4 + boat.speed * 0.018, 0.24, 1.2);
+      const awForward = Math.cos(apparentWindRel);
+      const awLateral = Math.sin(apparentWindRel);
+      const liftForward = -awLateral;
+      const liftLateral = awForward;
+      const sailForceForward = (dragCoeff * awForward + liftCoeff * liftForward) * q * 0.0022;
+      const sailForceLateral = (dragCoeff * awLateral + liftCoeff * liftLateral) * q * 0.0022;
+
+      const keelGrip = clamp(0.6 + Math.abs(vForward) * 0.12, 0.6, 2.35);
+      const forwardResist = 0.26 + Math.max(0, vForward) * 0.028 + Math.max(0, boat.heel - 20) * 0.016;
+      const lateralResist = 0.75 + keelGrip;
+      const rudderFlow = clamp(Math.abs(vForward), 0.2, 18);
+      const rudderSide = boat.rudder * rudderFlow * rudderFlow * 0.06;
+
+      let forwardAccel = sailForceForward;
+      if (boat.inIrons) forwardAccel *= 0.08;
+      forwardAccel -= vForward * forwardResist;
+      let lateralAccel = sailForceLateral - vLateral * lateralResist + rudderSide;
+
+      const turnRate = boat.rudder * rudderFlow * 0.065 + vLateral * 0.01;
       boat.heading = normalizeAngle(boat.heading + turnRate * dt);
 
-      const driveLossInIrons = boat.inIrons ? 0.06 : 1;
-      const surge = sailDrive * driveLossInIrons * 11.25;
-      boat.vx += Math.cos(boat.heading) * surge * dt;
-      boat.vy += Math.sin(boat.heading) * surge * dt;
+      vForward += forwardAccel * dt;
+      vLateral += lateralAccel * dt;
 
-      const leeway = Math.sin(trueWindRel) * (0.6 + (1 - boat.trimEfficiency) * 0.5) * dt * 8;
-      boat.vx += Math.cos(boat.heading + Math.PI / 2) * leeway;
-      boat.vy += Math.sin(boat.heading + Math.PI / 2) * leeway;
+      const heelTarget = clamp(Math.abs(sailForceLateral) * 2.7 + Math.abs(vLateral) * 0.9, 0, 32);
+      boat.heel = lerp(boat.heel, heelTarget, dt * 2.2);
 
-      boat.vx *= Math.max(0, 1 - drag * dt);
-      boat.vy *= Math.max(0, 1 - drag * dt);
+      const newForwardX = Math.cos(boat.heading);
+      const newForwardY = Math.sin(boat.heading);
+      const newRightX = Math.cos(boat.heading + Math.PI / 2);
+      const newRightY = Math.sin(boat.heading + Math.PI / 2);
+      boat.vx = newForwardX * vForward + newRightX * vLateral;
+      boat.vy = newForwardY * vForward + newRightY * vLateral;
 
       boat.x += boat.vx * dt;
       boat.y += boat.vy * dt;
