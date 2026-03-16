@@ -76,8 +76,6 @@ async function readHud(page) {
 
 async function roundBuoyUsingPhysics(page, budgetMs) {
   const deadline = Date.now() + budgetMs;
-  let turnRightKey = 'd';
-  let turnLeftKey = 'a';
   let previousDistance = Infinity;
 
   while (Date.now() < deadline) {
@@ -95,27 +93,18 @@ async function roundBuoyUsingPhysics(page, budgetMs) {
       continue;
     }
 
-    const previousHeading = hud.headingDeg;
     const deltaToMark = signedDegDelta(hud.targetDeg, hud.headingDeg);
 
     if (/in irons/i.test(hud.status)) {
       await page.keyboard.press(' ');
     }
 
-    if (Math.abs(deltaToMark) > 6) {
-      const key = deltaToMark > 0 ? turnRightKey : turnLeftKey;
-      const turnHoldMs = Math.min(360, 120 + Math.abs(deltaToMark) * 2.5);
+    if (Math.abs(deltaToMark) > 4) {
+      const key = deltaToMark > 0 ? 'd' : 'a';
+      const turnHoldMs = Math.min(260, 80 + Math.abs(deltaToMark) * 1.8);
       await page.keyboard.down(key);
       await page.waitForTimeout(turnHoldMs);
       await page.keyboard.up(key);
-
-      const newHeading = (await readHud(page)).headingDeg;
-      if (Number.isFinite(newHeading)) {
-        const progress = Math.abs(signedDegDelta(hud.targetDeg, previousHeading)) - Math.abs(signedDegDelta(hud.targetDeg, newHeading));
-        if (progress < -2) {
-          [turnRightKey, turnLeftKey] = [turnLeftKey, turnRightKey];
-        }
-      }
     }
 
     const absWind = Math.abs(signedDegDelta(hud.windDeg, hud.headingDeg));
@@ -152,19 +141,19 @@ test('rounds at least one buoy in the browser using steering and sail controls',
 
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${url}/?e2e=1`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#scoreValue');
 
     const initialHud = await readHud(page);
     assert.equal(initialHud.score, 0);
 
     let rounded = false;
-    for (let attempt = 0; attempt < 4 && !rounded; attempt += 1) {
+    for (let attempt = 0; attempt < 3 && !rounded; attempt += 1) {
       if (attempt > 0) {
         await page.keyboard.press('r');
         await page.waitForTimeout(800);
       }
-      rounded = await roundBuoyUsingPhysics(page, 25_000);
+      rounded = await roundBuoyUsingPhysics(page, 20_000);
     }
     assert.equal(rounded, true, 'expected the boat to round at least one buoy using game controls and physics');
 
