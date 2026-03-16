@@ -770,7 +770,7 @@
       boat.heading = normalizeAngle(boat.heading + turnRate * dt);
 
       const driveLossInIrons = boat.inIrons ? 0.06 : 1;
-      const surge = sailDrive * driveLossInIrons * 7.5;
+      const surge = sailDrive * driveLossInIrons * 11.25;
       boat.vx += Math.cos(boat.heading) * surge * dt;
       boat.vy += Math.sin(boat.heading) * surge * dt;
 
