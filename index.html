@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slop Sloop</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: rgba(10, 20, 35, 0.82);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --text: #eaf6ff;
+      --muted: #9dc0d8;
+      --accent: #8de1ff;
+      --good: #83f0a2;
+      --warn: #ffd36a;
+      --bad: #ff8e8e;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(circle at top, #12304f 0%, var(--bg) 55%, #040910 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .hud {
+      position: fixed;
+      inset: 16px 16px auto 16px;
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+      padding: 14px 16px;
+      pointer-events: auto;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: 0.04em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      font-size: 14px;
+    }
+
+    .row:last-child { border-bottom: none; }
+    .label { color: var(--muted); }
+    .value { font-weight: 700; }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 112px;
+      text-align: center;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    .status strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+
+    .controls {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      width: min(560px, calc(100vw - 32px));
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .controls p {
+      margin: 6px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(141,225,255,0.14);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .meter {
+      margin-top: 10px;
+      height: 10px;
+      width: 100%;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .meter > div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--good), var(--warn), var(--bad));
+      transition: width 80ms linear;
+    }
+
+    .footer-note {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: rgba(0,0,0,0.32);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .hud {
+        grid-template-columns: 1fr;
+      }
+      .controls {
+        grid-template-columns: 1fr;
+        width: min(440px, calc(100vw - 32px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="panel">
+      <div class="title">
+        <div>
+          <div class="subtitle">Browser Sailing Simulator</div>
+          <h1>⛵ Slop Sloop</h1>
+        </div>
+        <div class="badge">Single file</div>
+      </div>
+      <div class="row"><span class="label">Boat speed</span><span class="value" id="speedValue">0.0 kn</span></div>
+      <div class="row"><span class="label">Heading</span><span class="value" id="headingValue">000°</span></div>
+      <div class="row"><span class="label">Wind</span><span class="value" id="windValue">000° / 0 kn</span></div>
+      <div class="row"><span class="label">Sail trim</span><span class="value" id="sailValue">0°</span></div>
+      <div class="row"><span class="label">Rudder</span><span class="value" id="rudderValue">0°</span></div>
+      <div class="row"><span class="label">VMG to mark</span><span class="value" id="vmgValue">0.0 kn</span></div>
+      <div class="row"><span class="label">Distance to mark</span><span class="value" id="distanceValue">0 m</span></div>
+      <div class="row"><span class="label">Score</span><span class="value" id="scoreValue">0</span></div>
+    </div>
+
+    <div class="panel status" id="statusBox">
+      <div>
+        <strong>Round the buoys.</strong>
+        Trim the sail to the wind, avoid irons, and chain marks for score.
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="title">
+        <div>
+          <div class="subtitle">Boat Condition</div>
+          <h1 style="font-size:20px">Trim & Heel</h1>
+        </div>
+      </div>
+      <div class="row"><span class="label">Trim efficiency</span><span class="value" id="trimValue">0%</span></div>
+      <div class="meter"><div id="trimMeter"></div></div>
+      <div class="row" style="margin-top:12px"><span class="label">Heel</span><span class="value" id="heelValue">0°</span></div>
+      <div class="meter"><div id="heelMeter"></div></div>
+      <div class="row" style="margin-top:12px"><span class="label">Tack</span><span class="value" id="tackValue">Starboard</span></div>
+      <div class="row"><span class="label">Best point of sail</span><span class="value" id="pointValue">Beam reach</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="panel">
+      <div class="subtitle">Controls</div>
+      <p><strong>A / D</strong> or <strong>← / →</strong>: rudder left / right</p>
+      <p><strong>W / S</strong> or <strong>↑ / ↓</strong>: trim sail in / ease out</p>
+      <p><strong>Space</strong>: tack assist</p>
+      <p><strong>R</strong>: restart</p>
+    </div>
+    <div class="panel">
+      <div class="subtitle">How it plays</div>
+      <p>You cannot sail directly into the wind. Build speed on a reach, then work upwind by tacking. Better sail trim gives more drive. Too much power increases heel and drag.</p>
+    </div>
+  </div>
+
+  <div class="footer-note">Drop this file into GitHub Pages or S3 as index.html</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const ui = {
+      speed: document.getElementById('speedValue'),
+      heading: document.getElementById('headingValue'),
+      wind: document.getElementById('windValue'),
+      sail: document.getElementById('sailValue'),
+      rudder: document.getElementById('rudderValue'),
+      vmg: document.getElementById('vmgValue'),
+      distance: document.getElementById('distanceValue'),
+      score: document.getElementById('scoreValue'),
+      trim: document.getElementById('trimValue'),
+      heel: document.getElementById('heelValue'),
+      tack: document.getElementById('tackValue'),
+      point: document.getElementById('pointValue'),
+      trimMeter: document.getElementById('trimMeter'),
+      heelMeter: document.getElementById('heelMeter'),
+      status: document.getElementById('statusBox')
+    };
+
+    function resize() {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const TAU = Math.PI * 2;
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const len = (x, y) => Math.hypot(x, y);
+
+    function normalizeAngle(a) {
+      while (a <= -Math.PI) a += TAU;
+      while (a > Math.PI) a -= TAU;
+      return a;
+    }
+
+    function angleTo(x1, y1, x2, y2) {
+      return Math.atan2(y2 - y1, x2 - x1);
+    }
+
+    function deg(rad) {
+      let d = (rad * 180 / Math.PI) % 360;
+      if (d < 0) d += 360;
+      return d;
+    }
+
+    const world = {
+      width: 4200,
+      height: 4200,
+      waterPatternOffset: 0,
+      score: 0,
+      combo: 0,
+      timer: 0,
+      lastMarkTime: 0,
+      windDir: -Math.PI / 4,
+      windSpeed: 12,
+      windGust: 0,
+      mark: null,
+      splash: []
+    };
+
+    const boat = {
+      x: 2100,
+      y: 2100,
+      vx: 0,
+      vy: 0,
+      heading: 0.5,
+      rudder: 0,
+      sail: 0.55,
+      heel: 0,
+      trimEfficiency: 0,
+      speed: 0,
+      inIrons: false
+    };
+
+    const keys = new Set();
+    addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      keys.add(key);
+      if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) e.preventDefault();
+      if (key === 'r') resetGame();
+      if (key === ' ') {
+        const apparent = normalizeAngle(world.windDir - boat.heading);
+        boat.heading += apparent > 0 ? -0.28 : 0.28;
+        boat.rudder = apparent > 0 ? -0.8 : 0.8;
+      }
+    });
+    addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+    function spawnMark() {
+      const margin = 500;
+      const x = margin + Math.random() * (world.width - margin * 2);
+      const y = margin + Math.random() * (world.height - margin * 2);
+      world.mark = { x, y, r: 28, pulse: 0, worth: 100 + Math.round(Math.random() * 100) };
+    }
+
+    function resetGame() {
+      boat.x = 2100;
+      boat.y = 2100;
+      boat.vx = 0;
+      boat.vy = 0;
+      boat.heading = Math.random() * TAU;
+      boat.rudder = 0;
+      boat.sail = 0.55;
+      boat.heel = 0;
+      boat.trimEfficiency = 0;
+      boat.speed = 0;
+      boat.inIrons = false;
+      world.score = 0;
+      world.combo = 0;
+      world.timer = 0;
+      world.lastMarkTime = 0;
+      world.windDir = Math.random() * TAU;
+      world.windSpeed = 10 + Math.random() * 6;
+      world.windGust = 0;
+      world.splash = [];
+      spawnMark();
+      setStatus('Round the buoy.', 'Sail fast on a reach, then work your angles.');
+    }
+
+    function setStatus(title, body) {
+      ui.status.innerHTML = `<div><strong>${title}</strong>${body}</div>`;
+    }
+
+    function getPointOfSail(absWindAngle) {
+      const degs = absWindAngle * 180 / Math.PI;
+      if (degs < 35) return 'In irons';
+      if (degs < 60) return 'Close hauled';
+      if (degs < 100) return 'Beam reach';
+      if (degs < 145) return 'Broad reach';
+      return 'Run';
+    }
+
+    function update(dt) {
+      world.timer += dt;
+      world.windGust = Math.sin(world.timer * 0.45) * 1.3 + Math.sin(world.timer * 1.2) * 0.6;
+      const liveWindSpeed = world.windSpeed + world.windGust;
+      world.windDir += Math.sin(world.timer * 0.08) * 0.0009;
+
+      const rudderInput = (keys.has('a') || keys.has('arrowleft') ? -1 : 0) + (keys.has('d') || keys.has('arrowright') ? 1 : 0);
+      const sailInput = (keys.has('w') || keys.has('arrowup') ? -1 : 0) + (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
+
+      boat.rudder = clamp(boat.rudder + rudderInput * dt * 2.5, -1.0, 1.0);
+      if (!rudderInput) boat.rudder *= Math.pow(0.08, dt);
+
+      boat.sail = clamp(boat.sail + sailInput * dt * 0.55, 0.08, 1.25);
+
+      boat.speed = len(boat.vx, boat.vy);
+
+      const trueWindRel = normalizeAngle(world.windDir - boat.heading);
+      const absWindAngle = Math.abs(trueWindRel);
+      const noGo = 35 * Math.PI / 180;
+      const bestSail = clamp(absWindAngle * 0.9, 0.15, 1.2);
+      const trimError = Math.abs(bestSail - boat.sail);
+      boat.trimEfficiency = clamp(1 - trimError / 0.75, 0, 1);
+
+      const pointFactor = (() => {
+        if (absWindAngle < noGo) return 0;
+        if (absWindAngle < Math.PI / 3) return 0.65;
+        if (absWindAngle < Math.PI / 2) return 1.0;
+        if (absWindAngle < 2.5) return 0.82;
+        return 0.58;
+      })();
+
+      boat.inIrons = absWindAngle < noGo;
+      const sailDrive = liveWindSpeed * pointFactor * boat.trimEfficiency;
+      const heelTarget = clamp((liveWindSpeed * boat.trimEfficiency * Math.sin(absWindAngle) * 0.95), 0, 28);
+      boat.heel = lerp(boat.heel, heelTarget, dt * 1.8);
+
+      const drag = 0.22 + boat.speed * 0.012 + Math.max(0, boat.heel - 18) * 0.01;
+      const turnRate = boat.rudder * clamp(0.4 + boat.speed * 0.018, 0.24, 1.2);
+      boat.heading = normalizeAngle(boat.heading + turnRate * dt);
+
+      const driveLossInIrons = boat.inIrons ? 0.06 : 1;
+      const surge = sailDrive * driveLossInIrons * 7.5;
+      boat.vx += Math.cos(boat.heading) * surge * dt;
+      boat.vy += Math.sin(boat.heading) * surge * dt;
+
+      const leeway = Math.sin(trueWindRel) * (0.6 + (1 - boat.trimEfficiency) * 0.5) * dt * 8;
+      boat.vx += Math.cos(boat.heading + Math.PI / 2) * leeway;
+      boat.vy += Math.sin(boat.heading + Math.PI / 2) * leeway;
+
+      boat.vx *= Math.max(0, 1 - drag * dt);
+      boat.vy *= Math.max(0, 1 - drag * dt);
+
+      boat.x += boat.vx * dt;
+      boat.y += boat.vy * dt;
+
+      if (boat.x < 120 || boat.x > world.width - 120) {
+        boat.vx *= -0.35;
+        boat.x = clamp(boat.x, 120, world.width - 120);
+        setStatus('Shallow water!', 'You bounced off the edge of the chart.');
+      }
+      if (boat.y < 120 || boat.y > world.height - 120) {
+        boat.vy *= -0.35;
+        boat.y = clamp(boat.y, 120, world.height - 120);
+        setStatus('Shoal warning!', 'Keep inside the charted course.');
+      }
+
+      world.waterPatternOffset += boat.speed * dt * 0.03;
+      world.mark.pulse += dt * 2;
+
+      const dx = world.mark.x - boat.x;
+      const dy = world.mark.y - boat.y;
+      const dist = Math.hypot(dx, dy);
+      const bearingToMark = Math.atan2(dy, dx);
+      const courseVecX = Math.cos(boat.heading) * boat.speed;
+      const courseVecY = Math.sin(boat.heading) * boat.speed;
+      const toMarkX = Math.cos(bearingToMark);
+      const toMarkY = Math.sin(bearingToMark);
+      const vmg = (courseVecX * toMarkX + courseVecY * toMarkY) * 0.18;
+
+      if (dist < 60) {
+        const elapsed = world.timer - world.lastMarkTime;
+        if (elapsed < 18) world.combo += 1;
+        else world.combo = 1;
+        world.lastMarkTime = world.timer;
+        const gained = world.mark.worth * world.combo;
+        world.score += gained;
+        setStatus(`Mark rounded! +${gained}`, `Combo x${world.combo}. New buoy on course.`);
+        for (let i = 0; i < 14; i++) {
+          world.splash.push({
+            x: world.mark.x,
+            y: world.mark.y,
+            vx: (Math.random() - 0.5) * 90,
+            vy: (Math.random() - 0.5) * 90,
+            life: 1 + Math.random() * 0.8
+          });
+        }
+        spawnMark();
+      }
+
+      world.splash = world.splash.filter(p => (p.life -= dt) > 0);
+      for (const p of world.splash) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+      }
+
+      if (boat.inIrons && boat.speed < 35) {
+        setStatus('In irons.', 'Bear away or use Space for a quick tack assist.');
+      }
+
+      updateHud(dist, vmg, liveWindSpeed, absWindAngle);
+    }
+
+    function updateHud(dist, vmg, liveWindSpeed, absWindAngle) {
+      ui.speed.textContent = (boat.speed * 0.18).toFixed(1) + ' kn';
+      ui.heading.textContent = String(Math.round(deg(boat.heading))).padStart(3, '0') + '°';
+      ui.wind.textContent = `${String(Math.round(deg(world.windDir))).padStart(3, '0')}° / ${liveWindSpeed.toFixed(1)} kn`;
+      ui.sail.textContent = Math.round(boat.sail * 57.3) + '°';
+      ui.rudder.textContent = Math.round(boat.rudder * 35) + '°';
+      ui.vmg.textContent = vmg.toFixed(1) + ' kn';
+      ui.distance.textContent = Math.round(dist) + ' m';
+      ui.score.textContent = String(world.score);
+      ui.trim.textContent = Math.round(boat.trimEfficiency * 100) + '%';
+      ui.heel.textContent = Math.round(boat.heel) + '°';
+      ui.tack.textContent = normalizeAngle(world.windDir - boat.heading) > 0 ? 'Port' : 'Starboard';
+      ui.point.textContent = getPointOfSail(absWindAngle);
+      ui.trimMeter.style.width = Math.round(boat.trimEfficiency * 100) + '%';
+      ui.heelMeter.style.width = Math.round(clamp(boat.heel / 30, 0, 1) * 100) + '%';
+    }
+
+    function draw() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const camX = clamp(boat.x - w / 2, 0, world.width - w);
+      const camY = clamp(boat.y - h / 2, 0, world.height - h);
+
+      ctx.clearRect(0, 0, w, h);
+
+      drawWater(camX, camY, w, h);
+      drawGrid(camX, camY, w, h);
+      drawMark(camX, camY);
+      drawSplash(camX, camY);
+      drawBoat(w / 2 + (boat.x - camX - w / 2), h / 2 + (boat.y - camY - h / 2));
+      drawMiniCompass(w - 130, h - 130);
+      drawWindArrow(130, h - 120);
+    }
+
+    function drawWater(camX, camY, w, h) {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#184f73');
+      grad.addColorStop(0.45, '#0f3e62');
+      grad.addColorStop(1, '#0a2840');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.translate(-camX * 0.18, -camY * 0.18);
+      ctx.globalAlpha = 0.1;
+      for (let y = -40; y < h + 80; y += 36) {
+        ctx.beginPath();
+        for (let x = -40; x < w + 80; x += 16) {
+          const waveY = y + Math.sin((x + world.waterPatternOffset * 70 + y) * 0.02) * 4;
+          if (x === -40) ctx.moveTo(x, waveY);
+          else ctx.lineTo(x, waveY);
+        }
+        ctx.strokeStyle = '#b6ecff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawGrid(camX, camY, w, h) {
+      const step = 200;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      for (let x = Math.floor(camX / step) * step; x <= camX + w; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x - camX, 0);
+        ctx.lineTo(x - camX, h);
+        ctx.stroke();
+      }
+      for (let y = Math.floor(camY / step) * step; y <= camY + h; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y - camY);
+        ctx.lineTo(w, y - camY);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawMark(camX, camY) {
+      const x = world.mark.x - camX;
+      const y = world.mark.y - camY;
+      const pulse = 1 + Math.sin(world.mark.pulse * 2) * 0.1;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(pulse, pulse);
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 34, 0, TAU);
+      ctx.fillStyle = 'rgba(255, 211, 106, 0.16)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, world.mark.r, 0, TAU);
+      ctx.fillStyle = '#ffd36a';
+      ctx.fill();
+      ctx.strokeStyle = '#fff4c2';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -46);
+      ctx.lineTo(0, -6);
+      ctx.strokeStyle = '#e5f6ff';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -42);
+      ctx.lineTo(24, -30);
+      ctx.lineTo(0, -18);
+      ctx.closePath();
+      ctx.fillStyle = '#ff8e8e';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawSplash(camX, camY) {
+      ctx.save();
+      for (const p of world.splash) {
+        ctx.globalAlpha = clamp(p.life, 0, 1) * 0.8;
+        ctx.beginPath();
+        ctx.arc(p.x - camX, p.y - camY, 2 + p.life * 3, 0, TAU);
+        ctx.fillStyle = '#dff8ff';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawBoat(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(boat.heading);
+
+      ctx.save();
+      ctx.rotate((-Math.sign(normalizeAngle(world.windDir - boat.heading)) || 1) * boat.heel * Math.PI / 180 * 0.3);
+
+      ctx.beginPath();
+      ctx.moveTo(34, 0);
+      ctx.quadraticCurveTo(6, 16, -26, 12);
+      ctx.lineTo(-38, 0);
+      ctx.lineTo(-26, -12);
+      ctx.quadraticCurveTo(6, -16, 34, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#e9edf2';
+      ctx.fill();
+      ctx.strokeStyle = '#9aa6b2';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.lineTo(-30, 0);
+      ctx.strokeStyle = '#6b3f22';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(-2, -44);
+      ctx.strokeStyle = '#dce7ef';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      const sailAngle = clamp(boat.sail, 0.08, 1.25) * (normalizeAngle(world.windDir - boat.heading) > 0 ? 1 : -1);
+      ctx.save();
+      ctx.translate(-2, -38);
+      ctx.rotate(sailAngle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(28, 20, 34, 58);
+      ctx.lineTo(0, 58);
+      ctx.closePath();
+      ctx.fillStyle = boat.trimEfficiency > 0.75 ? '#f7ffff' : '#d7e7ef';
+      ctx.fill();
+      ctx.strokeStyle = '#a8bac8';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.moveTo(-28, 0);
+      ctx.lineTo(-44, boat.rudder * 10);
+      ctx.strokeStyle = '#6b3f22';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.restore();
+
+      if (boat.speed > 24) {
+        ctx.beginPath();
+        ctx.moveTo(-40, -5);
+        ctx.quadraticCurveTo(-64, 0, -82 - boat.speed * 0.9, 0);
+        ctx.quadraticCurveTo(-64, 0, -40, 5);
+        ctx.strokeStyle = 'rgba(223,248,255,0.75)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawMiniCompass(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.beginPath();
+      ctx.arc(0, 0, 56, 0, TAU);
+      ctx.fillStyle = 'rgba(7, 17, 31, 0.55)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#9dc0d8';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('N', 0, -38);
+      ctx.fillText('S', 0, 44);
+      ctx.fillText('E', 40, 4);
+      ctx.fillText('W', -40, 4);
+
+      ctx.rotate(boat.heading - Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -32);
+      ctx.lineTo(12, 16);
+      ctx.lineTo(0, 8);
+      ctx.lineTo(-12, 16);
+      ctx.closePath();
+      ctx.fillStyle = '#8de1ff';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawWindArrow(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.beginPath();
+      ctx.arc(0, 0, 52, 0, TAU);
+      ctx.fillStyle = 'rgba(7, 17, 31, 0.55)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.rotate(world.windDir - Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -34);
+      ctx.lineTo(10, -8);
+      ctx.lineTo(3, -8);
+      ctx.lineTo(3, 26);
+      ctx.lineTo(-3, 26);
+      ctx.lineTo(-3, -8);
+      ctx.lineTo(-10, -8);
+      ctx.closePath();
+      ctx.fillStyle = '#83f0a2';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    resetGame();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
