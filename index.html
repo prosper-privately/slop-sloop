@@ -833,8 +833,8 @@
 
       const awForward = Math.cos(apparentWindRel);
       const awLateral = Math.sin(apparentWindRel);
-      const liftForward = -awLateral;
-      const liftLateral = awForward;
+      const liftForward = awLateral;
+      const liftLateral = -awForward;
       const sailForceForward = (dragCoeff * awForward + liftCoeff * liftForward) * q * 0.0022;
       const sailForceLateral = (dragCoeff * awLateral + liftCoeff * liftLateral) * q * 0.0022;
 
