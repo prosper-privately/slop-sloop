@@ -92,16 +92,39 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 112px;
+      min-height: 72px;
       text-align: center;
       font-size: 15px;
       color: var(--text);
+      padding: 6px 12px;
     }
 
     .status strong {
       display: block;
       font-size: 20px;
       margin-bottom: 6px;
+    }
+
+    #statusBox {
+      min-height: 0;
+      padding: 4px 10px;
+      align-self: start;
+    }
+
+    #statusBox > div {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #statusBox strong {
+      display: inline;
+      margin: 0;
+      flex-shrink: 0;
     }
 
     .controls {
