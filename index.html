@@ -748,9 +748,11 @@
       const trueWindRel = normalizeAngle(apparentWindDir - boat.heading);
       const absWindAngle = Math.abs(trueWindRel);
       const noGo = 35 * Math.PI / 180;
-      const bestSail = clamp(absWindAngle * 0.9, 0.15, 1.2);
+      const bestSail = clamp(absWindAngle * 0.7 + 0.08, 0.1, 1.18);
+      const trimWindow = 0.36;
       const trimError = Math.abs(bestSail - boat.sail);
-      boat.trimEfficiency = clamp(1 - trimError / 0.75, 0, 1);
+      const trimSharpness = absWindAngle < Math.PI / 3 ? 1.25 : 1;
+      boat.trimEfficiency = clamp(1 - (trimError / trimWindow) * trimSharpness, 0, 1);
 
       const pointFactor = (() => {
         if (absWindAngle < noGo) return 0;
@@ -888,10 +890,12 @@
         const trueWindRelAi = normalizeAngle(apparentWindDirAi - ai.heading);
         const absWindAngleAi = Math.abs(trueWindRelAi);
         const noGoAi = 35 * Math.PI / 180;
-        const bestSailAi = clamp(absWindAngleAi * 0.88, 0.16, 1.2);
+        const bestSailAi = clamp(absWindAngleAi * 0.7 + 0.08, 0.1, 1.18);
         ai.sail = lerp(ai.sail, bestSailAi, dt * 1.7);
+        const trimWindowAi = 0.36;
         const trimErrorAi = Math.abs(bestSailAi - ai.sail);
-        ai.trimEfficiency = clamp(1 - trimErrorAi / 0.78, 0, 1);
+        const trimSharpnessAi = absWindAngleAi < Math.PI / 3 ? 1.25 : 1;
+        ai.trimEfficiency = clamp(1 - (trimErrorAi / trimWindowAi) * trimSharpnessAi, 0, 1);
 
         const pointFactorAi = (() => {
           if (absWindAngleAi < noGoAi) return 0;
