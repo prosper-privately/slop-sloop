@@ -1,0 +1,7 @@
+{
+  "name": "slop-sloop",
+  "private": true,
+  "scripts": {
+    "test": "node --test sim-math.test.js"
+  }
+}
