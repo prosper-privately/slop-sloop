@@ -971,8 +971,7 @@
       drawMark(camX, camY);
       drawSplash(camX, camY);
       drawBoat(w / 2 + (boat.x - camX - w / 2), h / 2 + (boat.y - camY - h / 2));
-      drawMiniCompass(w - 130, h - 130);
-      drawWindArrow(130, h - 120);
+      drawWindArrow(w - 130, h - 130);
     }
 
     function drawAiBoats(camX, camY) {
@@ -1291,37 +1290,6 @@
         ctx.stroke();
       }
 
-      ctx.restore();
-    }
-
-    function drawMiniCompass(x, y) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.beginPath();
-      ctx.arc(0, 0, 56, 0, TAU);
-      ctx.fillStyle = 'rgba(7, 17, 31, 0.55)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = '#9dc0d8';
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('N', 0, -38);
-      ctx.fillText('S', 0, 44);
-      ctx.fillText('E', 40, 4);
-      ctx.fillText('W', -40, 4);
-
-      ctx.rotate(boat.heading - Math.PI / 2);
-      ctx.beginPath();
-      ctx.moveTo(0, -32);
-      ctx.lineTo(12, 16);
-      ctx.lineTo(0, 8);
-      ctx.lineTo(-12, 16);
-      ctx.closePath();
-      ctx.fillStyle = '#8de1ff';
-      ctx.fill();
       ctx.restore();
     }
 
