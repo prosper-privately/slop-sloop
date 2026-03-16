@@ -196,7 +196,7 @@
     <div class="panel status" id="statusBox">
       <div>
         <strong>Round the buoys.</strong>
-        Trim the sail to the wind, avoid irons, and chain marks for score.
+        Trim the sail to the wind, dodge islands, and chain marks for score.
       </div>
     </div>
 
@@ -226,7 +226,7 @@
     </div>
     <div class="panel">
       <div class="subtitle">How it plays</div>
-      <p>You cannot sail directly into the wind. Build speed on a reach, then work upwind by tacking. Better sail trim gives more drive. Too much power increases heel and drag.</p>
+      <p>You cannot sail directly into the wind. Build speed on a reach, then work upwind by tacking. Better sail trim gives more drive. Too much power increases heel and drag. Avoid islands unless you want a dramatic coconut-confetti crash.</p>
     </div>
   </div>
 
@@ -298,7 +298,10 @@
       windSpeed: 12,
       windGust: 0,
       mark: null,
-      splash: []
+      splash: [],
+      islands: [],
+      crashed: false,
+      crashTime: 0
     };
 
     const boat = {
@@ -331,9 +334,63 @@
 
     function spawnMark() {
       const margin = 500;
-      const x = margin + Math.random() * (world.width - margin * 2);
-      const y = margin + Math.random() * (world.height - margin * 2);
+      let x = margin + Math.random() * (world.width - margin * 2);
+      let y = margin + Math.random() * (world.height - margin * 2);
+      for (let i = 0; i < 24; i++) {
+        const tooCloseToIsland = world.islands.some(island => Math.hypot(x - island.x, y - island.y) < island.r + 180);
+        const tooCloseToStart = Math.hypot(x - 2100, y - 2100) < 280;
+        if (!tooCloseToIsland && !tooCloseToStart) break;
+        x = margin + Math.random() * (world.width - margin * 2);
+        y = margin + Math.random() * (world.height - margin * 2);
+      }
       world.mark = { x, y, r: 28, pulse: 0, worth: 100 + Math.round(Math.random() * 100) };
+    }
+
+    function spawnIslands() {
+      world.islands = [];
+      const total = 6;
+      const margin = 420;
+      for (let i = 0; i < total; i++) {
+        let attempts = 0;
+        while (attempts++ < 200) {
+          const island = {
+            x: margin + Math.random() * (world.width - margin * 2),
+            y: margin + Math.random() * (world.height - margin * 2),
+            r: 60 + Math.random() * 46,
+            wobble: Math.random() * TAU
+          };
+          const clearStart = Math.hypot(island.x - 2100, island.y - 2100) > 420;
+          const clearOthers = world.islands.every(other => Math.hypot(island.x - other.x, island.y - other.y) > island.r + other.r + 180);
+          if (clearStart && clearOthers) {
+            world.islands.push(island);
+            break;
+          }
+        }
+      }
+    }
+
+    function crashIntoIsland(island) {
+      world.crashed = true;
+      world.crashTime = 0;
+      world.combo = 0;
+      boat.vx = 0;
+      boat.vy = 0;
+      setStatus('🏝️ BEACHED! Coconut confetti activated.', 'You pancaked into an island. Press R to relaunch your majestic tub.');
+      for (let i = 0; i < 120; i++) {
+        const a = Math.random() * TAU;
+        const speed = 90 + Math.random() * 280;
+        world.splash.push({
+          x: boat.x,
+          y: boat.y,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          life: 0.8 + Math.random() * 1.5,
+          fun: true,
+          size: 3 + Math.random() * 6,
+          hue: 28 + Math.random() * 70
+        });
+      }
+      island.wobble += Math.PI;
     }
 
     function resetGame() {
@@ -356,8 +413,11 @@
       world.windSpeed = 10 + Math.random() * 6;
       world.windGust = 0;
       world.splash = [];
+      world.crashed = false;
+      world.crashTime = 0;
+      spawnIslands();
       spawnMark();
-      setStatus('Round the buoy.', 'Sail fast on a reach, then work your angles.');
+      setStatus('Round the buoy. Avoid islands.', 'Sail fast on a reach, then work your angles between hazards.');
     }
 
     function setStatus(title, body) {
@@ -375,9 +435,24 @@
 
     function update(dt) {
       world.timer += dt;
+      if (world.crashed) world.crashTime += dt;
       world.windGust = Math.sin(world.timer * 0.45) * 1.3 + Math.sin(world.timer * 1.2) * 0.6;
       const liveWindSpeed = world.windSpeed + world.windGust;
       world.windDir += Math.sin(world.timer * 0.08) * 0.0009;
+
+      if (world.crashed) {
+        boat.rudder *= Math.pow(0.05, dt);
+        boat.heel = lerp(boat.heel, 0, dt * 2.5);
+        world.splash = world.splash.filter(p => (p.life -= dt) > 0);
+        for (const p of world.splash) {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= 0.975;
+          p.vy *= 0.975;
+        }
+        updateHud(Math.hypot(world.mark.x - boat.x, world.mark.y - boat.y), 0, liveWindSpeed, Math.abs(normalizeAngle(world.windDir - boat.heading)));
+        return;
+      }
 
       const rudderInput = (keys.has('a') || keys.has('arrowleft') ? -1 : 0) + (keys.has('d') || keys.has('arrowright') ? 1 : 0);
       const sailInput = (keys.has('w') || keys.has('arrowup') ? -1 : 0) + (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
@@ -437,6 +512,14 @@
         boat.vy *= -0.35;
         boat.y = clamp(boat.y, 120, world.height - 120);
         setStatus('Shoal warning!', 'Keep inside the charted course.');
+      }
+
+      for (const island of world.islands) {
+        const islandDist = Math.hypot(boat.x - island.x, boat.y - island.y);
+        if (islandDist < island.r + 28) {
+          crashIntoIsland(island);
+          break;
+        }
       }
 
       world.waterPatternOffset += boat.speed * dt * 0.03;
@@ -514,11 +597,52 @@
 
       drawWater(camX, camY, w, h);
       drawGrid(camX, camY, w, h);
+      drawIslands(camX, camY);
       drawMark(camX, camY);
       drawSplash(camX, camY);
       drawBoat(w / 2 + (boat.x - camX - w / 2), h / 2 + (boat.y - camY - h / 2));
       drawMiniCompass(w - 130, h - 130);
       drawWindArrow(130, h - 120);
+    }
+
+    function drawIslands(camX, camY) {
+      for (const island of world.islands) {
+        const x = island.x - camX;
+        const y = island.y - camY;
+        const bob = Math.sin(world.timer * 0.8 + island.wobble) * 2;
+
+        ctx.save();
+        ctx.translate(x, y + bob);
+
+        ctx.beginPath();
+        ctx.arc(0, 4, island.r + 16, 0, TAU);
+        ctx.fillStyle = 'rgba(20, 12, 5, 0.2)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, island.r, 0, TAU);
+        const sand = ctx.createRadialGradient(-island.r * 0.2, -island.r * 0.3, 8, 0, 0, island.r * 1.08);
+        sand.addColorStop(0, '#ecd48b');
+        sand.addColorStop(0.6, '#d0b164');
+        sand.addColorStop(1, '#9f7e3f');
+        ctx.fillStyle = sand;
+        ctx.fill();
+        ctx.strokeStyle = '#5c4320';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        for (let i = 0; i < 3; i++) {
+          const angle = island.wobble + i * 2.1;
+          const px = Math.cos(angle) * island.r * 0.35;
+          const py = Math.sin(angle) * island.r * 0.35;
+          ctx.beginPath();
+          ctx.arc(px, py, island.r * 0.22, 0, TAU);
+          ctx.fillStyle = '#5d9f52';
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
     }
 
     function drawWater(camX, camY, w, h) {
@@ -610,8 +734,8 @@
       for (const p of world.splash) {
         ctx.globalAlpha = clamp(p.life, 0, 1) * 0.8;
         ctx.beginPath();
-        ctx.arc(p.x - camX, p.y - camY, 2 + p.life * 3, 0, TAU);
-        ctx.fillStyle = '#dff8ff';
+        ctx.arc(p.x - camX, p.y - camY, p.fun ? p.size : 2 + p.life * 3, 0, TAU);
+        ctx.fillStyle = p.fun ? `hsl(${p.hue}, 92%, 64%)` : '#dff8ff';
         ctx.fill();
       }
       ctx.restore();
