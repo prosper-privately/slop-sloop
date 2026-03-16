@@ -382,7 +382,8 @@
       islands: [],
       animals: [],
       crashed: false,
-      crashTime: 0
+      crashTime: 0,
+      crashCause: null
     };
 
     const boat = {
@@ -396,7 +397,9 @@
       heel: 0,
       trimEfficiency: 0,
       speed: 0,
-      inIrons: false
+      inIrons: false,
+      sinkProgress: 0,
+      sinkSpin: 0
     };
 
     const keys = new Set();
@@ -573,6 +576,7 @@
     function crashIntoIsland(island) {
       world.crashed = true;
       world.crashTime = 0;
+      world.crashCause = 'island';
       world.combo = 0;
       boat.vx = 0;
       boat.vy = 0;
@@ -606,6 +610,8 @@
       boat.trimEfficiency = 0;
       boat.speed = 0;
       boat.inIrons = false;
+      boat.sinkProgress = 0;
+      boat.sinkSpin = 0;
       world.score = 0;
       world.combo = 0;
       world.timer = 0;
@@ -622,6 +628,7 @@
       spawnAnimals();
       world.crashed = false;
       world.crashTime = 0;
+      world.crashCause = null;
       spawnIslands();
       spawnAiBoats();
       spawnMark();
@@ -663,6 +670,29 @@
       world.trueWindDir = normalizeAngle(world.trueWindDir + windDelta * Math.min(1, dt * 0.75));
 
       if (world.crashed) {
+        if (world.crashCause === 'ai') {
+          boat.sinkProgress = clamp(boat.sinkProgress + dt * 0.55, 0, 1.2);
+          const sinkDrag = Math.max(0.14, 1 - boat.sinkProgress * 0.6);
+          boat.vx *= Math.max(0, 1 - dt * 1.8) * sinkDrag;
+          boat.vy *= Math.max(0, 1 - dt * 1.8) * sinkDrag;
+          boat.heading = normalizeAngle(boat.heading + boat.sinkSpin * dt * (1 + boat.sinkProgress));
+
+          if (Math.random() < dt * (18 + boat.sinkProgress * 24)) {
+            const bubbleAngle = Math.random() * TAU;
+            const bubbleSpeed = 20 + Math.random() * 70;
+            world.splash.push({
+              x: boat.x + Math.cos(bubbleAngle) * (6 + Math.random() * 24),
+              y: boat.y + Math.sin(bubbleAngle) * (6 + Math.random() * 24),
+              vx: Math.cos(bubbleAngle) * bubbleSpeed,
+              vy: Math.sin(bubbleAngle) * bubbleSpeed - (12 + boat.sinkProgress * 35),
+              life: 0.45 + Math.random() * 1.1,
+              size: 1.5 + Math.random() * 3,
+              hue: 192 + Math.random() * 24,
+              fun: false
+            });
+          }
+        }
+
         boat.rudder *= Math.pow(0.05, dt);
         boat.heel = lerp(boat.heel, 0, dt * 2.5);
         boat.sail = lerp(boat.sail, 0.12, dt * 1.5);
@@ -865,9 +895,13 @@
           sinkAiBoat(ai, 80);
           world.crashed = true;
           world.crashTime = 0;
+          world.crashCause = 'ai';
           world.combo = 0;
           boat.vx *= 0.08;
           boat.vy *= 0.08;
+          boat.sinkProgress = 0;
+          boat.sinkSpin = (Math.random() > 0.5 ? 1 : -1) * (1.2 + Math.random() * 1.1);
+          boat.heel = 12 + Math.random() * 10;
           for (let i = 0; i < 140; i++) {
             const a = Math.random() * TAU;
             const speed = 110 + Math.random() * 250;
@@ -1222,9 +1256,19 @@
     }
 
     function drawBoat(x, y) {
+      const sink = world.crashed && world.crashCause === 'ai' ? clamp(boat.sinkProgress, 0, 1.2) : 0;
+      const sinkOffset = sink * 32;
+      const sinkTilt = sink * (0.2 + Math.abs(boat.sinkSpin) * 0.08);
+      const sinkAlpha = clamp(1 - sink * 0.72, 0.1, 1);
+
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(x, y + sinkOffset);
       ctx.rotate(boat.heading);
+      ctx.globalAlpha = sinkAlpha;
+
+      if (sink > 0) {
+        ctx.rotate((Math.sign(boat.sinkSpin) || 1) * sinkTilt);
+      }
 
       ctx.save();
       ctx.rotate((-Math.sign(normalizeAngle(world.trueWindDir - boat.heading)) || 1) * boat.heel * Math.PI / 180 * 0.3);
@@ -1286,7 +1330,7 @@
         ctx.moveTo(-40, -5);
         ctx.quadraticCurveTo(-64, 0, -82 - boat.speed * 0.9, 0);
         ctx.quadraticCurveTo(-64, 0, -40, 5);
-        ctx.strokeStyle = 'rgba(223,248,255,0.75)';
+        ctx.strokeStyle = sink > 0 ? `rgba(223,248,255,${0.22 + (1 - sink) * 0.4})` : 'rgba(223,248,255,0.75)';
         ctx.lineWidth = 3;
         ctx.stroke();
       }
