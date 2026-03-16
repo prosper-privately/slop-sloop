@@ -379,14 +379,20 @@
 
     function spawnMark() {
       const margin = 500;
+      const minLegDistance = 230;
+      const maxLegDistance = 520;
       let x = margin + Math.random() * (world.width - margin * 2);
       let y = margin + Math.random() * (world.height - margin * 2);
       for (let i = 0; i < 24; i++) {
+        const angle = Math.random() * TAU;
+        const leg = minLegDistance + Math.random() * (maxLegDistance - minLegDistance);
+        x = clamp(boat.x + Math.cos(angle) * leg, margin, world.width - margin);
+        y = clamp(boat.y + Math.sin(angle) * leg, margin, world.height - margin);
         const tooCloseToIsland = world.islands.some(island => Math.hypot(x - island.x, y - island.y) < island.r + 180);
         const tooCloseToStart = Math.hypot(x - 2100, y - 2100) < 280;
-        if (!tooCloseToIsland && !tooCloseToStart) break;
-        x = margin + Math.random() * (world.width - margin * 2);
-        y = margin + Math.random() * (world.height - margin * 2);
+        const legDistance = Math.hypot(x - boat.x, y - boat.y);
+        const withinLegRange = legDistance >= minLegDistance && legDistance <= maxLegDistance;
+        if (!tooCloseToIsland && !tooCloseToStart && withinLegRange) break;
       }
       world.mark = { x, y, r: 28, pulse: 0, worth: 100 + Math.round(Math.random() * 100) };
     }
