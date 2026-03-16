@@ -2,7 +2,9 @@
   "name": "slop-sloop",
   "private": true,
   "scripts": {
-    "test": "node --test *.test.js"
+    "test": "npm run test:unit && npm run test:playwright",
+    "test:unit": "node --test sim-math.test.js sim-gameplay.test.js",
+    "test:playwright": "node --test playwright-navigation.test.js"
   },
   "devDependencies": {
     "playwright": "^1.52.0"
