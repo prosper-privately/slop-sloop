@@ -484,7 +484,8 @@
             sunk: false,
             sinkProgress: 0,
             thinkCooldown: 0,
-            targetHeading: Math.random() * TAU
+            targetHeading: Math.random() * TAU,
+            evadeHeadingBias: 0
           });
           break;
         }
@@ -799,7 +800,7 @@
 
         ai.thinkCooldown -= dt;
         if (ai.thinkCooldown <= 0) {
-          ai.thinkCooldown = 0.55 + Math.random() * 0.75;
+          ai.thinkCooldown = 0.35 + Math.random() * 0.45;
           let steerX = Math.cos(ai.heading);
           let steerY = Math.sin(ai.heading);
 
@@ -813,11 +814,27 @@
             const dx = ai.x - island.x;
             const dy = ai.y - island.y;
             const dist = Math.hypot(dx, dy);
-            const dangerRadius = island.r + 180;
+            const speedNow = Math.hypot(ai.vx, ai.vy);
+            const lookAhead = 42 + speedNow * 5.6;
+            const projectedX = ai.x + Math.cos(ai.heading) * lookAhead;
+            const projectedY = ai.y + Math.sin(ai.heading) * lookAhead;
+            const projectedDist = Math.hypot(projectedX - island.x, projectedY - island.y);
+            const dangerRadius = island.r + 220;
+            const tangentSign = Math.sign(Math.sin(angleTo(ai.x, ai.y, island.x, island.y) - ai.heading)) || 1;
             if (dist < dangerRadius && dist > 0.001) {
               const avoid = (dangerRadius - dist) / dangerRadius;
-              steerX += (dx / dist) * avoid * 2.2;
-              steerY += (dy / dist) * avoid * 2.2;
+              const tangentAngle = Math.atan2(dy, dx) + tangentSign * Math.PI / 2;
+              steerX += (dx / dist) * avoid * 2.8;
+              steerY += (dy / dist) * avoid * 2.8;
+              steerX += Math.cos(tangentAngle) * avoid * 1.45;
+              steerY += Math.sin(tangentAngle) * avoid * 1.45;
+            }
+
+            if (projectedDist < island.r + 110) {
+              const emergencyAvoid = clamp((island.r + 110 - projectedDist) / (island.r + 110), 0, 1);
+              ai.evadeHeadingBias = normalizeAngle(Math.atan2(dy, dx) + Math.PI + tangentSign * 0.75);
+              steerX += Math.cos(ai.evadeHeadingBias) * (2.6 + emergencyAvoid * 2.4);
+              steerY += Math.sin(ai.evadeHeadingBias) * (2.6 + emergencyAvoid * 2.4);
             }
           }
 
@@ -837,6 +854,12 @@
           }
 
           ai.targetHeading = Math.atan2(steerY, steerX);
+        }
+
+        if (ai.evadeHeadingBias) {
+          const biasError = normalizeAngle(ai.evadeHeadingBias - ai.targetHeading);
+          ai.targetHeading = normalizeAngle(ai.targetHeading + clamp(biasError, -0.7, 0.7) * 0.55);
+          ai.evadeHeadingBias = normalizeAngle(lerp(ai.evadeHeadingBias, ai.targetHeading, dt * 2.1));
         }
 
         const headingError = normalizeAngle(ai.targetHeading - ai.heading);
