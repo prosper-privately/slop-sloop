@@ -369,6 +369,63 @@
       return Math.atan2(y2 - y1, x2 - x1);
     }
 
+    function normalizePositiveAngle(a) {
+      let out = a % TAU;
+      if (out < 0) out += TAU;
+      return out;
+    }
+
+    function makeIslandOutline() {
+      const points = [];
+      const vertices = 13 + Math.floor(Math.random() * 8);
+      const wobbleA = 0.1 + Math.random() * 0.2;
+      const wobbleB = 0.08 + Math.random() * 0.18;
+      const phaseA = Math.random() * TAU;
+      const phaseB = Math.random() * TAU;
+
+      for (let i = 0; i < vertices; i++) {
+        const t = i / vertices;
+        const angle = t * TAU;
+        const harmonic = Math.sin(angle * 3 + phaseA) * wobbleA + Math.cos(angle * 5 + phaseB) * wobbleB;
+        const randomJitter = (Math.random() * 2 - 1) * 0.22;
+        const radiusMul = clamp(1 + harmonic + randomJitter, 0.68, 1.5);
+        points.push({ angle, radiusMul });
+      }
+
+      return points;
+    }
+
+    function islandRadiusAtAngle(island, angle) {
+      const a = normalizePositiveAngle(angle);
+      const points = island.outline;
+      for (let i = 0; i < points.length; i++) {
+        const p0 = points[i];
+        const p1 = points[(i + 1) % points.length];
+        const a0 = p0.angle;
+        const a1 = i === points.length - 1 ? p1.angle + TAU : p1.angle;
+        const sample = (i === points.length - 1 && a < a0) ? a + TAU : a;
+        if (sample >= a0 && sample <= a1) {
+          const t = (sample - a0) / Math.max(0.0001, (a1 - a0));
+          const mul = lerp(p0.radiusMul, p1.radiusMul, t);
+          return island.baseR * mul;
+        }
+      }
+      return island.maxR;
+    }
+
+    function traceIslandPath(island, radiusOffset = 0) {
+      if (!island.outline?.length) return;
+      for (let i = 0; i < island.outline.length; i++) {
+        const point = island.outline[i];
+        const radius = island.baseR * point.radiusMul + radiusOffset;
+        const px = Math.cos(point.angle) * radius;
+        const py = Math.sin(point.angle) * radius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    }
+
     function compassDeg(rad) {
       let d = ((rad * 180 / Math.PI) + 90) % 360;
       if (d < 0) d += 360;
@@ -442,7 +499,7 @@
         const leg = minLegDistance + Math.random() * (maxLegDistance - minLegDistance);
         x = clamp(boat.x + Math.cos(angle) * leg, margin, world.width - margin);
         y = clamp(boat.y + Math.sin(angle) * leg, margin, world.height - margin);
-        const tooCloseToIsland = world.islands.some(island => Math.hypot(x - island.x, y - island.y) < island.r + 180);
+        const tooCloseToIsland = world.islands.some(island => Math.hypot(x - island.x, y - island.y) < island.maxR + 180);
         const tooCloseToStart = Math.hypot(x - 2100, y - 2100) < 280;
         const legDistance = Math.hypot(x - boat.x, y - boat.y);
         const withinLegRange = legDistance >= minLegDistance && legDistance <= maxLegDistance;
@@ -461,11 +518,14 @@
           const island = {
             x: margin + Math.random() * (world.width - margin * 2),
             y: margin + Math.random() * (world.height - margin * 2),
-            r: 60 + Math.random() * 46,
-            wobble: Math.random() * TAU
+            baseR: 80 + Math.random() * 75,
+            wobble: Math.random() * TAU,
+            outline: makeIslandOutline(),
+            maxR: 0
           };
+          island.maxR = island.outline.reduce((max, point) => Math.max(max, island.baseR * point.radiusMul), 0);
           const clearStart = Math.hypot(island.x - 2100, island.y - 2100) > 420;
-          const clearOthers = world.islands.every(other => Math.hypot(island.x - other.x, island.y - other.y) > island.r + other.r + 180);
+          const clearOthers = world.islands.every(other => Math.hypot(island.x - other.x, island.y - other.y) > island.maxR + other.maxR + 190);
           if (clearStart && clearOthers) {
             world.islands.push(island);
             break;
@@ -484,7 +544,7 @@
           const x = margin + Math.random() * (world.width - margin * 2);
           const y = margin + Math.random() * (world.height - margin * 2);
           const clearStart = Math.hypot(x - 2100, y - 2100) > 430;
-          const clearIslands = world.islands.every(island => Math.hypot(x - island.x, y - island.y) > island.r + 150);
+          const clearIslands = world.islands.every(island => Math.hypot(x - island.x, y - island.y) > island.maxR + 150);
           const clearOthers = world.aiBoats.every(other => Math.hypot(x - other.x, y - other.y) > 170);
           if (!clearStart || !clearIslands || !clearOthers) continue;
           world.aiBoats.push({
@@ -799,7 +859,8 @@
 
       for (const island of world.islands) {
         const islandDist = Math.hypot(boat.x - island.x, boat.y - island.y);
-        if (islandDist < island.r + 28) {
+        const islandEdge = islandRadiusAtAngle(island, Math.atan2(boat.y - island.y, boat.x - island.x));
+        if (islandDist < islandEdge + 28) {
           crashIntoIsland(island);
           break;
         }
@@ -836,7 +897,8 @@
             const projectedX = ai.x + Math.cos(ai.heading) * lookAhead;
             const projectedY = ai.y + Math.sin(ai.heading) * lookAhead;
             const projectedDist = Math.hypot(projectedX - island.x, projectedY - island.y);
-            const dangerRadius = island.r + 220;
+            const localRadius = islandRadiusAtAngle(island, Math.atan2(dy, dx));
+            const dangerRadius = localRadius + 220;
             const tangentSign = Math.sign(Math.sin(angleTo(ai.x, ai.y, island.x, island.y) - ai.heading)) || 1;
             if (dist < dangerRadius && dist > 0.001) {
               const avoid = (dangerRadius - dist) / dangerRadius;
@@ -847,8 +909,8 @@
               steerY += Math.sin(tangentAngle) * avoid * 1.45;
             }
 
-            if (projectedDist < island.r + 110) {
-              const emergencyAvoid = clamp((island.r + 110 - projectedDist) / (island.r + 110), 0, 1);
+            if (projectedDist < localRadius + 110) {
+              const emergencyAvoid = clamp((localRadius + 110 - projectedDist) / (localRadius + 110), 0, 1);
               ai.evadeHeadingBias = normalizeAngle(Math.atan2(dy, dx) + Math.PI + tangentSign * 0.75);
               steerX += Math.cos(ai.evadeHeadingBias) * (2.6 + emergencyAvoid * 2.4);
               steerY += Math.sin(ai.evadeHeadingBias) * (2.6 + emergencyAvoid * 2.4);
@@ -926,7 +988,9 @@
         ai.speed = len(ai.vx, ai.vy);
 
         for (const island of world.islands) {
-          if (Math.hypot(ai.x - island.x, ai.y - island.y) < island.r + 22) {
+          const distToIsland = Math.hypot(ai.x - island.x, ai.y - island.y);
+          const localRadius = islandRadiusAtAngle(island, Math.atan2(ai.y - island.y, ai.x - island.x));
+          if (distToIsland < localRadius + 22) {
             sinkAiBoat(ai, 40);
             break;
           }
@@ -1113,13 +1177,13 @@
         ctx.translate(x, y + bob);
 
         ctx.beginPath();
-        ctx.arc(0, 4, island.r + 16, 0, TAU);
+        traceIslandPath(island, 16);
         ctx.fillStyle = 'rgba(20, 12, 5, 0.2)';
         ctx.fill();
 
         ctx.beginPath();
-        ctx.arc(0, 0, island.r, 0, TAU);
-        const sand = ctx.createRadialGradient(-island.r * 0.2, -island.r * 0.3, 8, 0, 0, island.r * 1.08);
+        traceIslandPath(island);
+        const sand = ctx.createRadialGradient(-island.baseR * 0.2, -island.baseR * 0.3, 8, 0, 0, island.maxR * 1.08);
         sand.addColorStop(0, '#ecd48b');
         sand.addColorStop(0.6, '#d0b164');
         sand.addColorStop(1, '#9f7e3f');
@@ -1131,10 +1195,10 @@
 
         for (let i = 0; i < 3; i++) {
           const angle = island.wobble + i * 2.1;
-          const px = Math.cos(angle) * island.r * 0.35;
-          const py = Math.sin(angle) * island.r * 0.35;
+          const px = Math.cos(angle) * island.baseR * 0.35;
+          const py = Math.sin(angle) * island.baseR * 0.35;
           ctx.beginPath();
-          ctx.arc(px, py, island.r * 0.22, 0, TAU);
+          ctx.arc(px, py, island.baseR * 0.22, 0, TAU);
           ctx.fillStyle = '#5d9f52';
           ctx.fill();
         }
