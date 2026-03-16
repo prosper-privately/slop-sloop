@@ -16,3 +16,5 @@ Controls:
 - W / S or ↑ / ↓: trim sail
 - Space: tack assist
 - R: restart
+
+Want to hear more about the intersection of privacy, security, and software development? Check out https://prosperprivately.substack.com/.
