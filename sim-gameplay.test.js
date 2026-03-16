@@ -6,7 +6,9 @@ const {
   pointOfSail,
   playerPointFactor,
   advanceMarkRounding,
-  computeSailingStep
+  computeSailingStep,
+  applySailingStep,
+  computeAndApplySailingStep
 } = require('./sim-gameplay.js');
 
 test('pointOfSail classifies key wind-angle bands', () => {
@@ -151,4 +153,132 @@ test('computeSailingStep scales turn rate with rudder direction and speed', () =
     absWindAngle: 1,
     rudder: 0.5
   }).turnRate));
+});
+
+
+test('applySailingStep updates heading and damps velocity with drag', () => {
+  const result = applySailingStep({
+    heading: 0,
+    vx: 1,
+    vy: 0,
+    trueWindRel: 1,
+    sailStep: {
+      turnRate: 0.5,
+      surge: 2,
+      leeway: 1,
+      drag: 0.4
+    },
+    dt: 0.2
+  });
+
+  assert.ok(result.heading > 0.09 && result.heading < 0.11);
+  assert.ok(result.vx > 1);
+  assert.ok(result.vy > 0);
+});
+
+test('computeAndApplySailingStep produces forward motion from standstill on a reach', () => {
+  let state = {
+    heading: 0.6,
+    sail: 0.75,
+    vx: 0,
+    vy: 0,
+    rudder: 0,
+    absWindAngle: 1.05,
+    apparentWindDir: 1.65,
+    apparentWindSpeed: 12,
+    trueWindRel: 1.05
+  };
+
+  for (let i = 0; i < 60; i++) {
+    const speed = Math.hypot(state.vx, state.vy);
+    const { sailStep, motion } = computeAndApplySailingStep({
+      heading: state.heading,
+      sail: state.sail,
+      speed,
+      apparentWindDir: state.apparentWindDir,
+      apparentWindSpeed: state.apparentWindSpeed,
+      absWindAngle: state.absWindAngle,
+      trueWindRel: state.trueWindRel,
+      rudder: state.rudder,
+      vx: state.vx,
+      vy: state.vy,
+      dt: 0.1,
+      settings: {
+        surgeScale: 0.082,
+        sideForceScale: 0.14,
+        keelGrip: 0.92,
+        hullDrag: 0.2,
+        speedDrag: 0.013,
+        heelDrag: 0.012,
+        rudderGrip: 0.22,
+        inIronsDrive: 0.12
+      }
+    });
+
+    state.heading = motion.heading;
+    state.vx = motion.vx;
+    state.vy = motion.vy;
+    state.sail = sailStep.bestSail;
+  }
+
+  assert.ok(Math.hypot(state.vx, state.vy) > 1.5);
+});
+
+test('AI and player sailing settings both maintain motion in steady wind', () => {
+  const runModel = (settings) => {
+    let heading = 0.4;
+    let sail = 0.6;
+    let vx = 0;
+    let vy = 0;
+    for (let i = 0; i < 80; i++) {
+      const absWindAngle = 1.2;
+      const apparentWindDir = heading + absWindAngle;
+      const trueWindRel = absWindAngle;
+      const speed = Math.hypot(vx, vy);
+      const { sailStep, motion } = computeAndApplySailingStep({
+        heading,
+        sail,
+        speed,
+        apparentWindDir,
+        apparentWindSpeed: 11.5,
+        absWindAngle,
+        trueWindRel,
+        rudder: 0.05,
+        vx,
+        vy,
+        dt: 0.1,
+        settings
+      });
+      heading = motion.heading;
+      vx = motion.vx;
+      vy = motion.vy;
+      sail = sailStep.bestSail;
+    }
+    return Math.hypot(vx, vy);
+  };
+
+  const playerSpeed = runModel({
+    surgeScale: 0.082,
+    sideForceScale: 0.14,
+    keelGrip: 0.92,
+    hullDrag: 0.2,
+    speedDrag: 0.013,
+    heelDrag: 0.012,
+    rudderGrip: 0.22,
+    inIronsDrive: 0.12
+  });
+
+  const aiSpeed = runModel({
+    surgeScale: 0.074,
+    sideForceScale: 0.13,
+    keelGrip: 0.88,
+    hullDrag: 0.22,
+    speedDrag: 0.014,
+    heelDrag: 0.011,
+    rudderGrip: 0.2,
+    inIronsDrive: 0.11
+  });
+
+  assert.ok(playerSpeed > 1.3, `player speed too low: ${playerSpeed}`);
+  assert.ok(aiSpeed > 1.0, `ai speed too low: ${aiSpeed}`);
 });

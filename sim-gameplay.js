@@ -143,6 +143,61 @@
     };
   }
 
+  function applySailingStep({
+    heading,
+    vx,
+    vy,
+    trueWindRel,
+    sailStep,
+    dt
+  }) {
+    const nextHeading = normalizeSigned(heading + sailStep.turnRate * dt);
+    let nextVx = vx + Math.cos(nextHeading) * sailStep.surge * dt;
+    let nextVy = vy + Math.sin(nextHeading) * sailStep.surge * dt;
+
+    const leewayDir = Math.sign(Math.sin(trueWindRel)) || 1;
+    nextVx += Math.cos(nextHeading + Math.PI / 2 * leewayDir) * sailStep.leeway * dt;
+    nextVy += Math.sin(nextHeading + Math.PI / 2 * leewayDir) * sailStep.leeway * dt;
+
+    const dragFactor = Math.max(0, 1 - sailStep.drag * dt);
+    nextVx *= dragFactor;
+    nextVy *= dragFactor;
+
+    return {
+      heading: nextHeading,
+      vx: nextVx,
+      vy: nextVy
+    };
+  }
+
+  function computeAndApplySailingStep({
+    heading,
+    sail,
+    speed,
+    apparentWindDir,
+    apparentWindSpeed,
+    absWindAngle,
+    trueWindRel,
+    rudder,
+    vx,
+    vy,
+    dt,
+    settings = {}
+  }) {
+    const sailStep = computeSailingStep({
+      heading,
+      sail,
+      speed,
+      apparentWindDir,
+      apparentWindSpeed,
+      absWindAngle,
+      rudder,
+      settings
+    });
+    const motion = applySailingStep({ heading, vx, vy, trueWindRel, sailStep, dt });
+    return { sailStep, motion };
+  }
+
   const api = {
     DEFAULT_ROUNDING_RADIUS,
     DEFAULT_COMBO_WINDOW_SECONDS,
@@ -151,7 +206,9 @@
     pointOfSail,
     playerPointFactor,
     advanceMarkRounding,
-    computeSailingStep
+    computeSailingStep,
+    applySailingStep,
+    computeAndApplySailingStep
   };
 
   if (typeof module !== 'undefined' && module.exports) {

@@ -340,6 +340,7 @@
     const {
       pointOfSail,
       advanceMarkRounding,
+      computeAndApplySailingStep,
       computeSailingStep
     } = window.SimGameplay;
 
@@ -773,14 +774,18 @@
       const apparentWindDir = Math.atan2(apparentWindVy, apparentWindVx);
       const trueWindRel = normalizeAngle(apparentWindDir - boat.heading);
       const absWindAngle = Math.abs(trueWindRel);
-      const sailStep = computeSailingStep({
+      const { sailStep, motion } = computeAndApplySailingStep({
         heading: boat.heading,
         sail: boat.sail,
         speed: boat.speed,
         apparentWindDir,
         apparentWindSpeed: len(apparentWindVx, apparentWindVy),
         absWindAngle,
+        trueWindRel,
         rudder: boat.rudder,
+        vx: boat.vx,
+        vy: boat.vy,
+        dt,
         settings: {
           surgeScale: 0.082,
           sideForceScale: 0.14,
@@ -796,17 +801,9 @@
       boat.trimEfficiency = sailStep.trimEfficiency;
       boat.inIrons = sailStep.inIrons;
       boat.heel = lerp(boat.heel, sailStep.heelTarget, dt * sailStep.heelResponse);
-      boat.heading = normalizeAngle(boat.heading + sailStep.turnRate * dt);
-
-      boat.vx += Math.cos(boat.heading) * sailStep.surge * dt;
-      boat.vy += Math.sin(boat.heading) * sailStep.surge * dt;
-
-      const leewayDir = Math.sign(Math.sin(trueWindRel)) || 1;
-      boat.vx += Math.cos(boat.heading + Math.PI / 2 * leewayDir) * sailStep.leeway * dt;
-      boat.vy += Math.sin(boat.heading + Math.PI / 2 * leewayDir) * sailStep.leeway * dt;
-
-      boat.vx *= Math.max(0, 1 - sailStep.drag * dt);
-      boat.vy *= Math.max(0, 1 - sailStep.drag * dt);
+      boat.heading = motion.heading;
+      boat.vx = motion.vx;
+      boat.vy = motion.vy;
 
       boat.x += boat.vx * dt;
       boat.y += boat.vy * dt;
@@ -938,14 +935,18 @@
         });
         ai.sail = lerp(ai.sail, aiSailStepPreview.bestSail, dt * 1.7);
 
-        const sailStepAi = computeSailingStep({
+        const { sailStep: sailStepAi, motion: motionAi } = computeAndApplySailingStep({
           heading: ai.heading,
           sail: ai.sail,
           speed: aiSpeed,
           apparentWindDir: apparentWindDirAi,
           apparentWindSpeed: len(apparentWindVxAi, apparentWindVyAi),
           absWindAngle: absWindAngleAi,
+          trueWindRel: trueWindRelAi,
           rudder: clamp(headingError, -1, 1),
+          vx: ai.vx,
+          vy: ai.vy,
+          dt,
           settings: {
             surgeScale: 0.074,
             sideForceScale: 0.13,
@@ -959,15 +960,9 @@
         });
 
         ai.trimEfficiency = sailStepAi.trimEfficiency;
-        ai.vx += Math.cos(ai.heading) * sailStepAi.surge * dt;
-        ai.vy += Math.sin(ai.heading) * sailStepAi.surge * dt;
-
-        const leewaySignAi = Math.sign(Math.sin(trueWindRelAi)) || 1;
-        ai.vx += Math.cos(ai.heading + Math.PI / 2 * leewaySignAi) * sailStepAi.leeway * dt;
-        ai.vy += Math.sin(ai.heading + Math.PI / 2 * leewaySignAi) * sailStepAi.leeway * dt;
-
-        ai.vx *= Math.max(0, 1 - sailStepAi.drag * dt);
-        ai.vy *= Math.max(0, 1 - sailStepAi.drag * dt);
+        ai.heading = motionAi.heading;
+        ai.vx = motionAi.vx;
+        ai.vy = motionAi.vy;
 
         ai.x += ai.vx * dt;
         ai.y += ai.vy * dt;
