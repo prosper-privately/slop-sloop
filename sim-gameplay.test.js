@@ -5,7 +5,8 @@ const {
   DEFAULT_NO_GO_ANGLE,
   pointOfSail,
   playerPointFactor,
-  advanceMarkRounding
+  advanceMarkRounding,
+  computeSailingStep
 } = require('./sim-gameplay.js');
 
 test('pointOfSail classifies key wind-angle bands', () => {
@@ -66,4 +67,88 @@ test('advanceMarkRounding resets combo after combo window elapses', () => {
     gained: 200,
     lastMarkTime: 49
   });
+});
+
+
+test('computeSailingStep produces stronger surge when trim is near best sail', () => {
+  const poorlyTrimmed = computeSailingStep({
+    heading: 0,
+    sail: 0.2,
+    speed: 2,
+    apparentWindDir: 1.2,
+    apparentWindSpeed: 12,
+    absWindAngle: 1.2,
+    rudder: 0.1
+  });
+
+  const wellTrimmed = computeSailingStep({
+    heading: 0,
+    sail: poorlyTrimmed.bestSail,
+    speed: 2,
+    apparentWindDir: 1.2,
+    apparentWindSpeed: 12,
+    absWindAngle: 1.2,
+    rudder: 0.1
+  });
+
+  assert.ok(wellTrimmed.trimEfficiency > poorlyTrimmed.trimEfficiency);
+  assert.ok(wellTrimmed.surge > poorlyTrimmed.surge);
+});
+
+test('computeSailingStep strongly reduces surge in irons', () => {
+  const inIrons = computeSailingStep({
+    heading: 0,
+    sail: 0.3,
+    speed: 1,
+    apparentWindDir: 0.12,
+    apparentWindSpeed: 11,
+    absWindAngle: 0.12,
+    rudder: 0
+  });
+
+  const reaching = computeSailingStep({
+    heading: 0,
+    sail: 0.75,
+    speed: 1,
+    apparentWindDir: 1.1,
+    apparentWindSpeed: 11,
+    absWindAngle: 1.1,
+    rudder: 0
+  });
+
+  assert.equal(inIrons.inIrons, true);
+  assert.ok(inIrons.surge < reaching.surge * 0.3);
+});
+
+test('computeSailingStep scales turn rate with rudder direction and speed', () => {
+  const leftTurn = computeSailingStep({
+    heading: 0,
+    sail: 0.7,
+    speed: 4,
+    apparentWindDir: 1,
+    apparentWindSpeed: 13,
+    absWindAngle: 1,
+    rudder: -0.5
+  });
+  const rightTurn = computeSailingStep({
+    heading: 0,
+    sail: 0.7,
+    speed: 4,
+    apparentWindDir: 1,
+    apparentWindSpeed: 13,
+    absWindAngle: 1,
+    rudder: 0.5
+  });
+
+  assert.ok(leftTurn.turnRate < 0);
+  assert.ok(rightTurn.turnRate > 0);
+  assert.ok(Math.abs(rightTurn.turnRate) > Math.abs(computeSailingStep({
+    heading: 0,
+    sail: 0.7,
+    speed: 0.2,
+    apparentWindDir: 1,
+    apparentWindSpeed: 13,
+    absWindAngle: 1,
+    rudder: 0.5
+  }).turnRate));
 });
