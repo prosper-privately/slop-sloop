@@ -343,6 +343,7 @@
       mark: null,
       splash: [],
       islands: [],
+      seaLife: [],
       crashed: false,
       crashTime: 0
     };
@@ -412,6 +413,39 @@
       }
     }
 
+    function spawnSeaLife() {
+      world.seaLife = [];
+      const specs = [
+        { kind: 'fish', total: 20, size: [10, 18], speed: [14, 24], depth: [0.24, 0.45], jumpPower: [120, 170], jumpRate: 0.02 },
+        { kind: 'dolphin', total: 7, size: [26, 40], speed: [26, 40], depth: [0.14, 0.34], jumpPower: [230, 320], jumpRate: 0.045 },
+        { kind: 'whale', total: 3, size: [62, 96], speed: [8, 15], depth: [0.08, 0.22], jumpPower: [180, 250], jumpRate: 0.012 }
+      ];
+
+      for (const spec of specs) {
+        for (let i = 0; i < spec.total; i++) {
+          const heading = Math.random() * TAU;
+          const speed = spec.speed[0] + Math.random() * (spec.speed[1] - spec.speed[0]);
+          world.seaLife.push({
+            kind: spec.kind,
+            x: Math.random() * world.width,
+            y: Math.random() * world.height,
+            heading,
+            speed,
+            turnSeed: Math.random() * TAU,
+            size: spec.size[0] + Math.random() * (spec.size[1] - spec.size[0]),
+            bobPhase: Math.random() * TAU,
+            depth: spec.depth[0] + Math.random() * (spec.depth[1] - spec.depth[0]),
+            z: 0,
+            vz: 0,
+            jumpPower: spec.jumpPower[0] + Math.random() * (spec.jumpPower[1] - spec.jumpPower[0]),
+            jumpRate: spec.jumpRate,
+            jumpCooldown: 1.8 + Math.random() * 4.5,
+            blink: Math.random() * TAU
+          });
+        }
+      }
+    }
+
     function crashIntoIsland(island) {
       world.crashed = true;
       world.crashTime = 0;
@@ -456,9 +490,11 @@
       world.windSpeed = 10 + Math.random() * 6;
       world.windGust = 0;
       world.splash = [];
+      world.seaLife = [];
       world.crashed = false;
       world.crashTime = 0;
       spawnIslands();
+      spawnSeaLife();
       spawnMark();
       setStatus('Round the buoy.', 'Follow the cyan guide line to the glowing buoy, then pass close to round it.');
     }
@@ -565,6 +601,60 @@
         }
       }
 
+      for (const creature of world.seaLife) {
+        const turn = Math.sin(world.timer * 0.18 + creature.turnSeed) * 0.16;
+        creature.heading = normalizeAngle(creature.heading + turn * dt);
+        creature.x += Math.cos(creature.heading) * creature.speed * dt;
+        creature.y += Math.sin(creature.heading) * creature.speed * dt;
+
+        if (creature.x < 80 || creature.x > world.width - 80) {
+          creature.heading = Math.PI - creature.heading;
+          creature.x = clamp(creature.x, 80, world.width - 80);
+        }
+        if (creature.y < 80 || creature.y > world.height - 80) {
+          creature.heading = -creature.heading;
+          creature.y = clamp(creature.y, 80, world.height - 80);
+        }
+
+        creature.blink += dt * (1.7 + creature.depth * 2.5);
+        creature.jumpCooldown -= dt;
+        if (creature.jumpCooldown <= 0 && creature.z === 0 && Math.random() < creature.jumpRate * dt * 60) {
+          creature.vz = creature.jumpPower;
+          creature.jumpCooldown = 2 + Math.random() * 5;
+          for (let i = 0; i < 7; i++) {
+            const splashAngle = Math.random() * TAU;
+            const splashSpeed = 35 + Math.random() * 90;
+            world.splash.push({
+              x: creature.x,
+              y: creature.y,
+              vx: Math.cos(splashAngle) * splashSpeed,
+              vy: Math.sin(splashAngle) * splashSpeed,
+              life: 0.3 + Math.random() * 0.6
+            });
+          }
+        }
+
+        if (creature.z > 0 || creature.vz > 0) {
+          creature.z += creature.vz * dt;
+          creature.vz -= 420 * dt;
+          if (creature.z <= 0) {
+            creature.z = 0;
+            creature.vz = 0;
+            for (let i = 0; i < 9; i++) {
+              const splashAngle = Math.random() * TAU;
+              const splashSpeed = 55 + Math.random() * 110;
+              world.splash.push({
+                x: creature.x,
+                y: creature.y,
+                vx: Math.cos(splashAngle) * splashSpeed,
+                vy: Math.sin(splashAngle) * splashSpeed,
+                life: 0.5 + Math.random() * 0.9
+              });
+            }
+          }
+        }
+      }
+
       world.waterPatternOffset += boat.speed * dt * 0.03;
       world.mark.pulse += dt * 2;
 
@@ -641,6 +731,7 @@
       ctx.clearRect(0, 0, w, h);
 
       drawWater(camX, camY, w, h);
+      drawSeaLife(camX, camY, w, h);
       drawGrid(camX, camY, w, h);
       drawIslands(camX, camY);
       drawMark(camX, camY);
@@ -648,6 +739,125 @@
       drawBoat(w / 2 + (boat.x - camX - w / 2), h / 2 + (boat.y - camY - h / 2));
       drawMiniCompass(w - 130, h - 130);
       drawWindArrow(130, h - 120);
+    }
+
+    function drawSeaLife(camX, camY, w, h) {
+      ctx.save();
+      for (const creature of world.seaLife) {
+        const x = creature.x - camX;
+        const y = creature.y - camY;
+        if (x < -180 || x > w + 180 || y < -180 || y > h + 180) continue;
+
+        const bob = Math.sin(world.timer * 2 + creature.bobPhase) * (creature.kind === 'fish' ? 2 : 4);
+        const jumpLift = creature.z * 0.14;
+
+        ctx.save();
+        ctx.translate(x, y + bob - jumpLift);
+        ctx.rotate(creature.heading + creature.vz * 0.0005);
+
+        ctx.globalAlpha = 0.16 + creature.depth * 0.4;
+        ctx.fillStyle = '#001526';
+        ctx.beginPath();
+        ctx.ellipse(0, 12 + jumpLift * 0.8, creature.size * 0.8, creature.size * 0.22, 0, 0, TAU);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.35 + creature.depth;
+
+        if (creature.kind === 'fish') {
+          ctx.fillStyle = '#9be9ff';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, creature.size, creature.size * 0.52, 0, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(-creature.size * 0.8, 0);
+          ctx.lineTo(-creature.size * 1.45, -creature.size * 0.5);
+          ctx.lineTo(-creature.size * 1.45, creature.size * 0.5);
+          ctx.closePath();
+          ctx.fillStyle = '#72cce8';
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.52, -creature.size * 0.1, creature.size * 0.16, 0, TAU);
+          ctx.fill();
+          const blink = Math.abs(Math.sin(creature.blink)) < 0.08;
+          ctx.strokeStyle = '#10354f';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          if (blink) {
+            ctx.moveTo(creature.size * 0.38, -creature.size * 0.1);
+            ctx.lineTo(creature.size * 0.66, -creature.size * 0.1);
+          } else {
+            ctx.arc(creature.size * 0.52, -creature.size * 0.1, creature.size * 0.08, 0, TAU);
+          }
+          ctx.stroke();
+        } else if (creature.kind === 'dolphin') {
+          ctx.fillStyle = '#9fd8ee';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, creature.size, creature.size * 0.4, 0, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(-creature.size * 0.8, 0);
+          ctx.lineTo(-creature.size * 1.28, -creature.size * 0.36);
+          ctx.lineTo(-creature.size * 1.28, creature.size * 0.36);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(-creature.size * 0.1, -creature.size * 0.06);
+          ctx.lineTo(creature.size * 0.12, -creature.size * 0.66);
+          ctx.lineTo(creature.size * 0.38, -creature.size * 0.1);
+          ctx.closePath();
+          ctx.fillStyle = '#73b8d4';
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.56, -creature.size * 0.13, creature.size * 0.1, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#132d46';
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.58, -creature.size * 0.13, creature.size * 0.05, 0, TAU);
+          ctx.fill();
+          ctx.strokeStyle = '#2b5a78';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.5, creature.size * 0.08, creature.size * 0.2, 0.1, 1.2);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#7eaed0';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, creature.size, creature.size * 0.47, 0, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(-creature.size * 0.95, 0);
+          ctx.lineTo(-creature.size * 1.5, -creature.size * 0.46);
+          ctx.lineTo(-creature.size * 1.5, creature.size * 0.46);
+          ctx.closePath();
+          ctx.fillStyle = '#6493b3';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(0, -creature.size * 0.16);
+          ctx.lineTo(creature.size * 0.2, -creature.size * 0.68);
+          ctx.lineTo(creature.size * 0.42, -creature.size * 0.2);
+          ctx.closePath();
+          ctx.fillStyle = '#5f88a6';
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.6, -creature.size * 0.13, creature.size * 0.09, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#11283d';
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.62, -creature.size * 0.13, creature.size * 0.045, 0, TAU);
+          ctx.fill();
+          ctx.strokeStyle = '#2c5673';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(creature.size * 0.5, creature.size * 0.1, creature.size * 0.22, 0.15, 1.2);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+      ctx.restore();
     }
 
     function drawIslands(camX, camY) {
