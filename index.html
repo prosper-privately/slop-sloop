@@ -267,6 +267,7 @@
       <div class="meter"><div id="heelMeter"></div></div>
       <div class="row" style="margin-top:12px"><span class="label">Tack</span><span class="value" id="tackValue">Starboard</span></div>
       <div class="row"><span class="label">Best point of sail</span><span class="value" id="pointValue">Beam reach</span></div>
+      <div class="row"><span class="label">Speed tip</span><span class="value" id="speedTipValue">Bear off onto a reach for max speed.</span></div>
     </div>
   </div>
 
@@ -316,6 +317,7 @@
       heel: document.getElementById('heelValue'),
       tack: document.getElementById('tackValue'),
       point: document.getElementById('pointValue'),
+      speedTip: document.getElementById('speedTipValue'),
       trimMeter: document.getElementById('trimMeter'),
       heelMeter: document.getElementById('heelMeter'),
       status: document.getElementById('statusBox')
@@ -1102,6 +1104,17 @@
       ui.heel.textContent = Math.round(boat.heel) + '°';
       ui.tack.textContent = normalizeAngle(world.trueWindDir - boat.heading) > 0 ? 'Port' : 'Starboard';
       ui.point.textContent = pointOfSail(absWindAngle);
+      if (absWindAngle > 2.6) {
+        ui.speedTip.textContent = 'Dead run is slower: steer 20–40° off the wind for more apparent wind.';
+      } else if (absWindAngle < 0.85) {
+        ui.speedTip.textContent = 'You are pinching. Bear away or tack to build speed on a reach.';
+      } else if (boat.trimEfficiency < 0.55) {
+        ui.speedTip.textContent = 'Trim sail toward the wind until trim efficiency climbs above ~70%.';
+      } else if (boat.heel > 24) {
+        ui.speedTip.textContent = 'Too much heel adds drag: ease sail slightly or head up a touch.';
+      } else {
+        ui.speedTip.textContent = 'Fast lane: beam/broad reach with high trim efficiency.';
+      }
       ui.trimMeter.style.width = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heelMeter.style.width = Math.round(clamp(boat.heel / 30, 0, 1) * 100) + '%';
     }
