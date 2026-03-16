@@ -205,11 +205,11 @@ test('computeAndApplySailingStep produces forward motion from standstill on a re
       vy: state.vy,
       dt: 0.1,
       settings: {
-        surgeScale: 0.082,
+        surgeScale: 0.1,
         sideForceScale: 0.14,
         keelGrip: 0.92,
-        hullDrag: 0.2,
-        speedDrag: 0.013,
+        hullDrag: 0.17,
+        speedDrag: 0.0115,
         heelDrag: 0.012,
         rudderGrip: 0.22,
         inIronsDrive: 0.12
@@ -259,11 +259,11 @@ test('AI and player sailing settings both maintain motion in steady wind', () =>
   };
 
   const playerSpeed = runModel({
-    surgeScale: 0.082,
+    surgeScale: 0.1,
     sideForceScale: 0.14,
     keelGrip: 0.92,
-    hullDrag: 0.2,
-    speedDrag: 0.013,
+    hullDrag: 0.17,
+    speedDrag: 0.0115,
     heelDrag: 0.012,
     rudderGrip: 0.22,
     inIronsDrive: 0.12
