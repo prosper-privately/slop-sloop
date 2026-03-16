@@ -369,8 +369,8 @@
       return Math.atan2(y2 - y1, x2 - x1);
     }
 
-    function deg(rad) {
-      let d = (rad * 180 / Math.PI) % 360;
+    function compassDeg(rad) {
+      let d = (90 - (rad * 180 / Math.PI)) % 360;
       if (d < 0) d += 360;
       return d;
     }
@@ -1014,14 +1014,14 @@
 
     function updateHud(dist, vmg, liveWindSpeed, absWindAngle) {
       ui.speed.textContent = (boat.speed * 0.18).toFixed(1) + ' kn';
-      ui.heading.textContent = String(Math.round(deg(boat.heading))).padStart(3, '0') + '°';
-      ui.wind.textContent = `${String(Math.round(deg(world.trueWindDir))).padStart(3, '0')}° / ${liveWindSpeed.toFixed(1)} kn`;
+      ui.heading.textContent = String(Math.round(compassDeg(boat.heading))).padStart(3, '0') + '°';
+      ui.wind.textContent = `${String(Math.round(compassDeg(world.trueWindDir))).padStart(3, '0')}° / ${liveWindSpeed.toFixed(1)} kn`;
       ui.sail.textContent = Math.round(boat.sail * 57.3) + '°';
       ui.rudder.textContent = Math.round(boat.rudder * 35) + '°';
       ui.vmg.textContent = vmg.toFixed(1) + ' kn';
       ui.distance.textContent = Math.round(dist) + ' m';
       ui.score.textContent = String(world.score);
-      const bearing = Math.round(deg(Math.atan2(world.mark.y - boat.y, world.mark.x - boat.x)));
+      const bearing = Math.round(compassDeg(Math.atan2(world.mark.y - boat.y, world.mark.x - boat.x)));
       ui.task.textContent = `Steer ${String(bearing).padStart(3, '0')}° and round the buoy`;
       ui.trim.textContent = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heel.textContent = Math.round(boat.heel) + '°';
