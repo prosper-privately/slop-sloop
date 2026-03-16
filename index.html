@@ -295,6 +295,13 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const runConfig = {
+      e2eMode: searchParams.get('e2e') === '1',
+      timeScale: searchParams.get('e2e') === '1' ? 2.2 : 1
+    };
+
     const ui = {
       speed: document.getElementById('speedValue'),
       heading: document.getElementById('headingValue'),
@@ -466,6 +473,17 @@
     addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
     function spawnMark() {
+      if (runConfig.e2eMode) {
+        world.mark = {
+          x: clamp(boat.x + 320, 500, world.width - 500),
+          y: clamp(boat.y + 20, 500, world.height - 500),
+          r: 28,
+          pulse: 0,
+          worth: 150
+        };
+        return;
+      }
+
       const margin = 500;
       const minLegDistance = 230;
       const maxLegDistance = 520;
@@ -487,6 +505,7 @@
 
     function spawnIslands() {
       world.islands = [];
+      if (runConfig.e2eMode) return;
       const total = 6;
       const margin = 420;
       for (let i = 0; i < total; i++) {
@@ -513,6 +532,7 @@
 
     function spawnAiBoats() {
       world.aiBoats = [];
+      if (runConfig.e2eMode) return;
       const total = 5;
       const margin = 380;
       for (let i = 0; i < total; i++) {
@@ -656,7 +676,7 @@
       boat.y = 2100;
       boat.vx = 0;
       boat.vy = 0;
-      boat.heading = 0;
+      boat.heading = runConfig.e2eMode ? 0 : Math.random() * TAU;
       boat.rudder = 0;
       boat.sail = 0.55;
       boat.heel = 0;
@@ -669,14 +689,14 @@
       world.combo = 0;
       world.timer = 0;
       world.lastMarkTime = 0;
-      world.trueWindDir = Math.random() * TAU;
+      world.trueWindDir = runConfig.e2eMode ? (Math.PI / 3) : Math.random() * TAU;
       world.windBaseDir = world.trueWindDir;
       world.windTargetDir = world.trueWindDir;
       boat.heading = launchReachHeading(world.trueWindDir, Math.random() < 0.5 ? -1 : 1);
-      world.windRetargetTimer = 8 + Math.random() * 8;
+      world.windRetargetTimer = runConfig.e2eMode ? Infinity : 8 + Math.random() * 8;
       world.windOscPhase = Math.random() * TAU;
-      world.windOscAmp = (3 + Math.random() * 4) * Math.PI / 180;
-      world.windSpeed = 10 + Math.random() * 6;
+      world.windOscAmp = runConfig.e2eMode ? 0 : (3 + Math.random() * 4) * Math.PI / 180;
+      world.windSpeed = runConfig.e2eMode ? 14 : 10 + Math.random() * 6;
       world.windGust = 0;
       world.splash = [];
       spawnAnimals();
@@ -694,13 +714,14 @@
     }
 
     function update(dt) {
+      dt *= runConfig.timeScale;
       world.timer += dt;
       if (world.crashed) world.crashTime += dt;
       world.windGust = Math.sin(world.timer * 0.45) * 1.3 + Math.sin(world.timer * 1.2) * 0.6;
       const liveWindSpeed = world.windSpeed + world.windGust;
 
       world.windRetargetTimer -= dt;
-      if (world.windRetargetTimer <= 0) {
+      if (!runConfig.e2eMode && world.windRetargetTimer <= 0) {
         const shift = (Math.random() * 2 - 1) * (10 * Math.PI / 180);
         world.windTargetDir = normalizeAngle(world.windTargetDir + shift);
         world.windRetargetTimer = 8 + Math.random() * 10;
