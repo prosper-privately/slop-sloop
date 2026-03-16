@@ -290,6 +290,7 @@
 
 
   <script src="sim-math.js"></script>
+  <script src="sim-gameplay.js"></script>
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
@@ -335,6 +336,12 @@
       islandRadiusAtAngle,
       compassDeg
     } = window.SimMath;
+
+    const {
+      pointOfSail,
+      playerPointFactor,
+      advanceMarkRounding
+    } = window.SimGameplay;
 
     const animalSpriteSets = {
       fish: ['animals/fish_0.png', 'animals/fish_1.png', 'animals/fish_2.png'],
@@ -683,15 +690,6 @@
       ui.status.innerHTML = `<div><strong>${title}</strong>${body}</div>`;
     }
 
-    function getPointOfSail(absWindAngle) {
-      const degs = absWindAngle * 180 / Math.PI;
-      if (degs < 35) return 'In irons';
-      if (degs < 60) return 'Close hauled';
-      if (degs < 100) return 'Beam reach';
-      if (degs < 145) return 'Broad reach';
-      return 'Run';
-    }
-
     function update(dt) {
       world.timer += dt;
       if (world.crashed) world.crashTime += dt;
@@ -782,13 +780,7 @@
       const trimSharpness = absWindAngle < Math.PI / 3 ? 1.25 : 1;
       boat.trimEfficiency = clamp(1 - (trimError / trimWindow) * trimSharpness, 0, 1);
 
-      const pointFactor = (() => {
-        if (absWindAngle < noGo) return 0;
-        if (absWindAngle < Math.PI / 3) return 0.65;
-        if (absWindAngle < Math.PI / 2) return 1.0;
-        if (absWindAngle < 2.5) return 0.82;
-        return 0.58;
-      })();
+      const pointFactor = playerPointFactor(absWindAngle, noGo);
 
       boat.inIrons = absWindAngle < noGo;
       const sailDrive = liveWindSpeed * pointFactor * boat.trimEfficiency;
@@ -1009,14 +1001,18 @@
       const toMarkY = Math.sin(bearingToMark);
       const vmg = (courseVecX * toMarkX + courseVecY * toMarkY) * 0.18;
 
-      if (dist < 60) {
-        const elapsed = world.timer - world.lastMarkTime;
-        if (elapsed < 18) world.combo += 1;
-        else world.combo = 1;
-        world.lastMarkTime = world.timer;
-        const gained = world.mark.worth * world.combo;
-        world.score += gained;
-        setStatus(`Mark rounded! +${gained}`, `Combo x${world.combo}. New buoy on course.`);
+      const rounding = advanceMarkRounding({
+        distanceToMark: dist,
+        timer: world.timer,
+        lastMarkTime: world.lastMarkTime,
+        combo: world.combo,
+        markWorth: world.mark.worth
+      });
+      if (rounding) {
+        world.combo = rounding.combo;
+        world.lastMarkTime = rounding.lastMarkTime;
+        world.score += rounding.gained;
+        setStatus(`Mark rounded! +${rounding.gained}`, `Combo x${world.combo}. New buoy on course.`);
         for (let i = 0; i < 14; i++) {
           world.splash.push({
             x: world.mark.x,
@@ -1058,7 +1054,7 @@
       ui.trim.textContent = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heel.textContent = Math.round(boat.heel) + '°';
       ui.tack.textContent = normalizeAngle(world.trueWindDir - boat.heading) > 0 ? 'Port' : 'Starboard';
-      ui.point.textContent = getPointOfSail(absWindAngle);
+      ui.point.textContent = pointOfSail(absWindAngle);
       ui.trimMeter.style.width = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heelMeter.style.width = Math.round(clamp(boat.heel / 30, 0, 1) * 100) + '%';
     }
