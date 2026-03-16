@@ -68,6 +68,21 @@
       letter-spacing: 0.04em;
     }
 
+    .title-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title-brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      object-fit: cover;
+    }
+
     .subtitle {
       color: var(--muted);
       font-size: 12px;
@@ -177,9 +192,12 @@
   <div class="hud">
     <div class="panel">
       <div class="title">
-        <div>
-          <div class="subtitle">Browser Sailing Simulator</div>
-          <h1>⛵ Slop Sloop</h1>
+        <div class="title-brand">
+          <img src="logo.png" alt="Slop Sloop logo" />
+          <div>
+            <div class="subtitle">Browser Sailing Simulator</div>
+            <h1>⛵ Slop Sloop</h1>
+          </div>
         </div>
         <div class="badge">Single file</div>
       </div>
