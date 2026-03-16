@@ -338,8 +338,11 @@
       timer: 0,
       lastMarkTime: 0,
       windDir: -Math.PI / 4,
+      windBaseDir: -Math.PI / 4,
       windTargetDir: -Math.PI / 4,
       windRetargetTimer: 0,
+      windOscPhase: Math.random() * TAU,
+      windOscAmp: 4 * Math.PI / 180,
       windSpeed: 12,
       windGust: 0,
       mark: null,
@@ -516,8 +519,11 @@
       world.timer = 0;
       world.lastMarkTime = 0;
       world.windDir = Math.random() * TAU;
+      world.windBaseDir = world.windDir;
       world.windTargetDir = world.windDir;
       world.windRetargetTimer = 8 + Math.random() * 8;
+      world.windOscPhase = Math.random() * TAU;
+      world.windOscAmp = (3 + Math.random() * 4) * Math.PI / 180;
       world.windSpeed = 10 + Math.random() * 6;
       world.windGust = 0;
       world.splash = [];
@@ -550,12 +556,18 @@
 
       world.windRetargetTimer -= dt;
       if (world.windRetargetTimer <= 0) {
-        const shift = (Math.random() * 2 - 1) * (8 * Math.PI / 180);
+        const shift = (Math.random() * 2 - 1) * (10 * Math.PI / 180);
         world.windTargetDir = normalizeAngle(world.windTargetDir + shift);
-        world.windRetargetTimer = 10 + Math.random() * 12;
+        world.windRetargetTimer = 8 + Math.random() * 10;
       }
-      const windDelta = normalizeAngle(world.windTargetDir - world.windDir);
-      world.windDir = normalizeAngle(world.windDir + windDelta * Math.min(1, dt * 0.12));
+
+      const baseWindDelta = normalizeAngle(world.windTargetDir - world.windBaseDir);
+      world.windBaseDir = normalizeAngle(world.windBaseDir + baseWindDelta * Math.min(1, dt * 0.28));
+      const windOscillation = Math.sin(world.timer * 0.22 + world.windOscPhase) * world.windOscAmp
+        + Math.sin(world.timer * 0.47 + world.windOscPhase * 0.53) * (world.windOscAmp * 0.45);
+      const desiredWindDir = normalizeAngle(world.windBaseDir + windOscillation);
+      const windDelta = normalizeAngle(desiredWindDir - world.windDir);
+      world.windDir = normalizeAngle(world.windDir + windDelta * Math.min(1, dt * 0.75));
 
       if (world.crashed) {
         boat.rudder *= Math.pow(0.05, dt);
