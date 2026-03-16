@@ -337,7 +337,7 @@
       combo: 0,
       timer: 0,
       lastMarkTime: 0,
-      windDir: -Math.PI / 4,
+      trueWindDir: -Math.PI / 4,
       windBaseDir: -Math.PI / 4,
       windTargetDir: -Math.PI / 4,
       windRetargetTimer: 0,
@@ -374,7 +374,7 @@
       if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) e.preventDefault();
       if (key === 'r') resetGame();
       if (key === ' ') {
-        const apparent = normalizeAngle(world.windDir - boat.heading);
+        const apparent = normalizeAngle(world.trueWindDir - boat.heading);
         boat.heading += apparent > 0 ? -0.28 : 0.28;
         boat.rudder = apparent > 0 ? -0.8 : 0.8;
       }
@@ -518,9 +518,9 @@
       world.combo = 0;
       world.timer = 0;
       world.lastMarkTime = 0;
-      world.windDir = Math.random() * TAU;
-      world.windBaseDir = world.windDir;
-      world.windTargetDir = world.windDir;
+      world.trueWindDir = Math.random() * TAU;
+      world.windBaseDir = world.trueWindDir;
+      world.windTargetDir = world.trueWindDir;
       world.windRetargetTimer = 8 + Math.random() * 8;
       world.windOscPhase = Math.random() * TAU;
       world.windOscAmp = (3 + Math.random() * 4) * Math.PI / 180;
@@ -566,8 +566,8 @@
       const windOscillation = Math.sin(world.timer * 0.22 + world.windOscPhase) * world.windOscAmp
         + Math.sin(world.timer * 0.47 + world.windOscPhase * 0.53) * (world.windOscAmp * 0.45);
       const desiredWindDir = normalizeAngle(world.windBaseDir + windOscillation);
-      const windDelta = normalizeAngle(desiredWindDir - world.windDir);
-      world.windDir = normalizeAngle(world.windDir + windDelta * Math.min(1, dt * 0.75));
+      const windDelta = normalizeAngle(desiredWindDir - world.trueWindDir);
+      world.trueWindDir = normalizeAngle(world.trueWindDir + windDelta * Math.min(1, dt * 0.75));
 
       if (world.crashed) {
         boat.rudder *= Math.pow(0.05, dt);
@@ -587,7 +587,7 @@
           p.vx *= 0.975;
           p.vy *= 0.975;
         }
-        updateHud(Math.hypot(world.mark.x - boat.x, world.mark.y - boat.y), 0, liveWindSpeed, Math.abs(normalizeAngle(world.windDir - boat.heading)));
+        updateHud(Math.hypot(world.mark.x - boat.x, world.mark.y - boat.y), 0, liveWindSpeed, Math.abs(normalizeAngle(world.trueWindDir - boat.heading)));
         return;
       }
 
@@ -601,7 +601,12 @@
 
       boat.speed = len(boat.vx, boat.vy);
 
-      const trueWindRel = normalizeAngle(world.windDir - boat.heading);
+      const trueWindVx = Math.cos(world.trueWindDir) * liveWindSpeed;
+      const trueWindVy = Math.sin(world.trueWindDir) * liveWindSpeed;
+      const apparentWindVx = trueWindVx - boat.vx * 0.18;
+      const apparentWindVy = trueWindVy - boat.vy * 0.18;
+      const apparentWindDir = Math.atan2(apparentWindVy, apparentWindVx);
+      const trueWindRel = normalizeAngle(apparentWindDir - boat.heading);
       const absWindAngle = Math.abs(trueWindRel);
       const noGo = 35 * Math.PI / 180;
       const bestSail = clamp(absWindAngle * 0.9, 0.15, 1.2);
@@ -714,7 +719,12 @@
         const headingError = normalizeAngle(ai.targetHeading - ai.heading);
         ai.heading = normalizeAngle(ai.heading + clamp(headingError, -1.1, 1.1) * dt * 0.95);
 
-        const trueWindRelAi = normalizeAngle(world.windDir - ai.heading);
+        const trueWindVxAi = Math.cos(world.trueWindDir) * liveWindSpeed;
+        const trueWindVyAi = Math.sin(world.trueWindDir) * liveWindSpeed;
+        const apparentWindVxAi = trueWindVxAi - ai.vx * 0.18;
+        const apparentWindVyAi = trueWindVyAi - ai.vy * 0.18;
+        const apparentWindDirAi = Math.atan2(apparentWindVyAi, apparentWindVxAi);
+        const trueWindRelAi = normalizeAngle(apparentWindDirAi - ai.heading);
         const absWindAngleAi = Math.abs(trueWindRelAi);
         const noGoAi = 35 * Math.PI / 180;
         const bestSailAi = clamp(absWindAngleAi * 0.88, 0.16, 1.2);
@@ -835,7 +845,7 @@
     function updateHud(dist, vmg, liveWindSpeed, absWindAngle) {
       ui.speed.textContent = (boat.speed * 0.18).toFixed(1) + ' kn';
       ui.heading.textContent = String(Math.round(deg(boat.heading))).padStart(3, '0') + '°';
-      ui.wind.textContent = `${String(Math.round(deg(world.windDir))).padStart(3, '0')}° / ${liveWindSpeed.toFixed(1)} kn`;
+      ui.wind.textContent = `${String(Math.round(deg(world.trueWindDir))).padStart(3, '0')}° / ${liveWindSpeed.toFixed(1)} kn`;
       ui.sail.textContent = Math.round(boat.sail * 57.3) + '°';
       ui.rudder.textContent = Math.round(boat.rudder * 35) + '°';
       ui.vmg.textContent = vmg.toFixed(1) + ' kn';
@@ -845,7 +855,7 @@
       ui.task.textContent = `Steer ${String(bearing).padStart(3, '0')}° and round the buoy`;
       ui.trim.textContent = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heel.textContent = Math.round(boat.heel) + '°';
-      ui.tack.textContent = normalizeAngle(world.windDir - boat.heading) > 0 ? 'Port' : 'Starboard';
+      ui.tack.textContent = normalizeAngle(world.trueWindDir - boat.heading) > 0 ? 'Port' : 'Starboard';
       ui.point.textContent = getPointOfSail(absWindAngle);
       ui.trimMeter.style.width = Math.round(boat.trimEfficiency * 100) + '%';
       ui.heelMeter.style.width = Math.round(clamp(boat.heel / 30, 0, 1) * 100) + '%';
@@ -903,7 +913,7 @@
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        const sailAngle = clamp(ai.sail, 0.08, 1.25) * (normalizeAngle(world.windDir - ai.heading) > 0 ? 1 : -1);
+        const sailAngle = clamp(ai.sail, 0.08, 1.25) * (normalizeAngle(world.trueWindDir - ai.heading) > 0 ? 1 : -1);
         ctx.save();
         ctx.translate(-2, -28 + sink * 4);
         ctx.rotate(sailAngle);
@@ -1087,7 +1097,7 @@
       ctx.rotate(boat.heading);
 
       ctx.save();
-      ctx.rotate((-Math.sign(normalizeAngle(world.windDir - boat.heading)) || 1) * boat.heel * Math.PI / 180 * 0.3);
+      ctx.rotate((-Math.sign(normalizeAngle(world.trueWindDir - boat.heading)) || 1) * boat.heel * Math.PI / 180 * 0.3);
 
       ctx.beginPath();
       ctx.moveTo(34, 0);
@@ -1116,7 +1126,7 @@
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      const sailAngle = clamp(boat.sail, 0.08, 1.25) * (normalizeAngle(world.windDir - boat.heading) > 0 ? 1 : -1);
+      const sailAngle = clamp(boat.sail, 0.08, 1.25) * (normalizeAngle(world.trueWindDir - boat.heading) > 0 ? 1 : -1);
       ctx.save();
       ctx.translate(-2, -38);
       ctx.rotate(sailAngle);
@@ -1195,7 +1205,7 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.16)';
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.rotate(world.windDir - Math.PI / 2);
+      ctx.rotate(world.trueWindDir - Math.PI / 2);
       ctx.beginPath();
       ctx.moveTo(0, -34);
       ctx.lineTo(10, -8);
