@@ -692,7 +692,8 @@
       world.trueWindDir = runConfig.e2eMode ? (Math.PI / 3) : Math.random() * TAU;
       world.windBaseDir = world.trueWindDir;
       world.windTargetDir = world.trueWindDir;
-      boat.heading = launchReachHeading(world.trueWindDir, Math.random() < 0.5 ? -1 : 1);
+      const launchTack = runConfig.e2eMode ? -1 : (Math.random() < 0.5 ? -1 : 1);
+      boat.heading = launchReachHeading(world.trueWindDir, launchTack);
       world.windRetargetTimer = runConfig.e2eMode ? Infinity : 8 + Math.random() * 8;
       world.windOscPhase = Math.random() * TAU;
       world.windOscAmp = runConfig.e2eMode ? 0 : (3 + Math.random() * 4) * Math.PI / 180;

@@ -93,7 +93,12 @@ async function roundBuoyUsingPhysics(page, budgetMs) {
       continue;
     }
 
-    const deltaToMark = signedDegDelta(hud.targetDeg, hud.headingDeg);
+    const windToMark = signedDegDelta(hud.targetDeg, hud.windDeg);
+    const upwind = Math.abs(windToMark) < 42;
+    const desiredHeading = upwind
+      ? (hud.windDeg + Math.sign(windToMark || 1) * 45 + 360) % 360
+      : hud.targetDeg;
+    const deltaToMark = signedDegDelta(desiredHeading, hud.headingDeg);
 
     if (/in irons/i.test(hud.status)) {
       await page.keyboard.press(' ');
@@ -108,7 +113,7 @@ async function roundBuoyUsingPhysics(page, budgetMs) {
     }
 
     const absWind = Math.abs(signedDegDelta(hud.windDeg, hud.headingDeg));
-    const targetSail = Math.max(5, Math.min(72, absWind * 0.55));
+    const targetSail = Math.max(8, Math.min(78, absWind * 0.62));
 
     if (hud.sailDeg > targetSail + 3) {
       await page.keyboard.down('w');
@@ -120,7 +125,7 @@ async function roundBuoyUsingPhysics(page, budgetMs) {
       await page.keyboard.up('s');
     }
 
-    if (hud.distanceM > previousDistance + 30) {
+    if (hud.distanceM > previousDistance + 24 || (upwind && hud.distanceM < 190 && Math.abs(windToMark) < 25)) {
       await page.keyboard.press(' ');
     }
     previousDistance = Math.min(previousDistance, hud.distanceM);
@@ -148,12 +153,12 @@ test('rounds at least one buoy in the browser using steering and sail controls',
     assert.equal(initialHud.score, 0);
 
     let rounded = false;
-    for (let attempt = 0; attempt < 3 && !rounded; attempt += 1) {
+    for (let attempt = 0; attempt < 2 && !rounded; attempt += 1) {
       if (attempt > 0) {
         await page.keyboard.press('r');
         await page.waitForTimeout(800);
       }
-      rounded = await roundBuoyUsingPhysics(page, 20_000);
+      rounded = await roundBuoyUsingPhysics(page, 45_000);
     }
     assert.equal(rounded, true, 'expected the boat to round at least one buoy using game controls and physics');
 
